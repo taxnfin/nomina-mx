@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nómina MX
 
-## Getting Started
+Sistema de nómina mexicana con trazabilidad auditable. Soporta pago **semanal, catorcenal,
+quincenal y mensual**, con cálculo de ISR, subsidio para el empleo, cuotas IMSS obrero-patronales,
+INFONAVIT, prestaciones de ley, finiquitos/liquidaciones y generación de CFDI 4.0 con complemento
+de Nómina 1.2.
 
-First, run the development server:
+## Stack
+
+Next.js 15 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind · Vitest · decimal.js
+
+## Puesta en marcha
 
 ```bash
+npm install
+cp .env.example .env          # ajusta DATABASE_URL y AUTH_SECRET
+npx prisma migrate deploy
+npm run db:seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Usuarios de la semilla (cámbialos antes de cualquier uso real): `admin@demo.mx`, `nomina@demo.mx`,
+`auditor@demo.mx`, contraseña `Demo1234!`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Comandos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Comando | Descripción |
+| --- | --- |
+| `npm run dev` | Servidor de desarrollo |
+| `npm test` | Pruebas del motor fiscal y de la bitácora |
+| `npm run typecheck` | Verificación de tipos |
+| `npm run lint` | ESLint |
+| `npm run db:migrate` | Aplica migraciones |
+| `npm run db:seed` | Empresa, empleados, tarifas y periodos 2025 de demostración |
 
-## Learn More
+## Cálculos implementados
 
-To learn more about Next.js, take a look at the following resources:
+- **Percepciones**: sueldo, séptimo día, faltas, incapacidades, permisos sin goce, vacaciones,
+  prima vacacional, horas extra dobles y triples (Art. 66-68 LFT), prima dominical (Art. 71),
+  días de descanso y festivos trabajados (Art. 73-75), aguinaldo (Art. 87) y PTU (Art. 117-127).
+- **Exenciones** del Art. 93 LISR por concepto, medidas en UMA.
+- **ISR** con la tarifa del Art. 96 LISR proyectada a cada periodicidad, subsidio para el empleo,
+  y retención de pagos extraordinarios por el procedimiento del Art. 174 RLISR.
+- **IMSS**: SBC integrado (Art. 27 y 30 LSS) con tope de 25 UMA, cuota fija, excedente de 3 UMA,
+  prestaciones en dinero y en especie, invalidez y vida, guarderías, riesgo de trabajo, retiro y
+  cesantía y vejez con la tabla progresiva vigente.
+- **INFONAVIT**: aportación patronal del 5 % y descuentos por crédito en porcentaje, cuota fija o
+  VSM (Art. 29 Ley del INFONAVIT).
+- **Separación**: finiquito y liquidación con partes proporcionales, prima de antigüedad
+  (Art. 162 LFT), indemnización constitucional y 20 días por año (Art. 48 y 50 LFT).
+- **Impuesto sobre nóminas** estatal, parametrizable por empresa.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Trazabilidad
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Cada evento relevante (alta de empleado, incidencia, cálculo, autorización, timbrado, pago,
+finiquito, inicio de sesión) se escribe en una bitácora **append-only**: el registro sella con
+SHA-256 su contenido canónico y el hash del evento anterior, formando una cadena. Modificar o
+borrar cualquier registro rompe la cadena y el verificador lo detecta —disponible en la pantalla
+de Trazabilidad y en `GET /api/auditoria/verificar`.
 
-## Deploy on Vercel
+Además, cada corrida guarda un **snapshot inmutable** de los parámetros fiscales usados y no puede
+recalcularse una vez autorizada, timbrada o pagada. La autorización está restringida al rol
+`ADMIN`, y cada recibo conserva su **memoria de cálculo** con el fundamento legal de cada importe.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Antes de producción
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Los parámetros fiscales incluidos son una semilla de 2025 y deben cotejarse contra las
+  publicaciones vigentes del DOF y del SAT (UMA, salario mínimo, tarifas del Anexo 8, cuotas IMSS).
+- Las tarifas periódicas se derivan de la mensual; conviene cargar directamente las tablas
+  publicadas para semanal, catorcenal y quincenal en `TarifaIsr`.
+- El PAC incluido es un **simulador de desarrollo**: no emite comprobantes fiscales válidos. Hay
+  que conectar un PAC real y sellar con el CSD del emisor, además de validar el XML contra los XSD
+  y las reglas de validación del SAT.
+- Conviene reforzar la bitácora a nivel de base de datos (revocar `UPDATE`/`DELETE` sobre
+  `RegistroBitacora`) y respaldar periódicamente el último hash fuera del sistema.
