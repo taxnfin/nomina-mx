@@ -50,6 +50,26 @@ Usuarios de la semilla (cámbialos antes de cualquier uso real): `admin@demo.mx`
   (Art. 162 LFT), indemnización constitucional y 20 días por año (Art. 48 y 50 LFT).
 - **Impuesto sobre nóminas** estatal, parametrizable por empresa.
 
+## Checador por WhatsApp
+
+El empleado manda `ENTRADA`, `COMIDA`, `REGRESO` o `SALIDA` al número de WhatsApp de la empresa
+(también entiende variantes como "ya llegué" o "me voy", y `AYUDA` devuelve las instrucciones).
+Twilio entrega el mensaje en `POST /api/whatsapp/webhook`, que valida la firma
+`X-Twilio-Signature`, identifica al empleado por su teléfono en E.164, guarda la checada —con
+ubicación si la comparte— y contesta con un acuse. Los reintentos de Twilio se descartan por
+`MessageSid`, así que una misma checada nunca se duplica.
+
+Desde **Checador** se previsualiza la asistencia del periodo y se aplica a la nómina: faltas,
+horas extra dobles y triples (nueve horas semanales al doble y el resto al triple, Arts. 66 y 68
+LFT), prima dominical y días de descanso trabajados se escriben como incidencias marcadas con
+`origen = CHECADOR`. Regenerarlas reemplaza solo esas incidencias —las capturadas a mano quedan
+intactas— y está bloqueado si la corrida del periodo ya se autorizó. Tanto las checadas como la
+derivación se sellan en la bitácora.
+
+Configuración por empleado: teléfono de WhatsApp, horario contractual, tolerancia y días
+laborables. Variables de entorno en `.env.example`; sin `TWILIO_AUTH_TOKEN` el webhook responde
+503.
+
 ## Trazabilidad
 
 Cada evento relevante (alta de empleado, incidencia, cálculo, autorización, timbrado, pago,
@@ -71,5 +91,9 @@ recalcularse una vez autorizada, timbrada o pagada. La autorización está restr
 - El PAC incluido es un **simulador de desarrollo**: no emite comprobantes fiscales válidos. Hay
   que conectar un PAC real y sellar con el CSD del emisor, además de validar el XML contra los XSD
   y las reglas de validación del SAT.
+- El webhook de WhatsApp debe publicarse por HTTPS con la URL exacta configurada en Twilio
+  (`TWILIO_WEBHOOK_URL`): si no coincide, la validación de firma rechaza los mensajes legítimos.
+  Conviene además ligar el número al empleado con un alta verificada, porque el remitente de
+  WhatsApp es el único factor de identificación.
 - Conviene reforzar la bitácora a nivel de base de datos (revocar `UPDATE`/`DELETE` sobre
   `RegistroBitacora`) y respaldar periódicamente el último hash fuera del sistema.

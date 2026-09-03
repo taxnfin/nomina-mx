@@ -7,6 +7,7 @@ const ENLACES = [
   { href: "/", texto: "Tablero" },
   { href: "/empleados", texto: "Empleados" },
   { href: "/incidencias", texto: "Incidencias" },
+  { href: "/checador", texto: "Checador" },
   { href: "/nomina", texto: "Nómina" },
   { href: "/finiquitos", texto: "Finiquitos" },
   { href: "/auditoria", texto: "Trazabilidad" },

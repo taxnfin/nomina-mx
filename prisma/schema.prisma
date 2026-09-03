@@ -92,6 +92,18 @@ enum TipoIncidencia {
   DIA_FESTIVO_TRABAJADO
 }
 
+enum TipoChecada {
+  ENTRADA
+  SALIDA
+  INICIO_COMIDA
+  FIN_COMIDA
+}
+
+enum OrigenChecada {
+  WHATSAPP
+  MANUAL
+}
+
 enum TipoSeparacion {
   RENUNCIA
   DESPIDO_JUSTIFICADO
@@ -158,6 +170,16 @@ model Empleado {
   banco                  String?
   cuentaClabe            String?
 
+  /// Número de WhatsApp en formato E.164 (+521...) usado por el checador.
+  telefonoWhatsapp  String?
+  checadorActivo    Boolean @default(false)
+  /// Horario contractual en HH:MM (hora local de la empresa).
+  horaEntrada       String  @default("09:00")
+  horaSalida        String  @default("18:00")
+  toleranciaMinutos Int     @default(15)
+  /// Días laborables como números ISO separados por coma (1=lunes … 7=domingo).
+  diasLaborables    String  @default("1,2,3,4,5")
+
   periodicidad  Periodicidad
   regimen       RegimenContratacion @default(SUELDOS_SALARIOS)
   tipoContrato  TipoContrato        @default(INDETERMINADO)
@@ -183,11 +205,32 @@ model Empleado {
 
   recibos           Recibo[]
   incidencias       Incidencia[]
+  checadas          Checada[]
   historialSalarios HistorialSalario[]
   finiquitos        Finiquito[]
 
   @@unique([empresaId, numeroEmpleado])
+  @@unique([empresaId, telefonoWhatsapp])
   @@index([empresaId, estado])
+}
+
+/// Registro de asistencia (checador). Las checadas de WhatsApp llegan por webhook.
+model Checada {
+  id           String        @id @default(cuid())
+  empleadoId   String
+  empleado     Empleado      @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  tipo         TipoChecada
+  ocurridoEn   DateTime
+  origen       OrigenChecada @default(WHATSAPP)
+  telefono     String?
+  /// Identificador del mensaje del proveedor; evita duplicar reintentos del webhook.
+  mensajeId    String?       @unique
+  textoMensaje String?
+  latitud      Decimal?      @db.Decimal(10, 6)
+  longitud     Decimal?      @db.Decimal(10, 6)
+  registradaEn DateTime      @default(now())
+
+  @@index([empleadoId, ocurridoEn])
 }
 
 model HistorialSalario {
@@ -323,9 +366,12 @@ model Incidencia {
   folio       String?
   comentario  String?
   aplicada    Boolean        @default(false)
+  /// MANUAL o CHECADOR: las derivadas del checador se regeneran, las manuales no se tocan.
+  origen      String         @default("MANUAL")
   creadaEn    DateTime       @default(now())
 
   @@index([empleadoId, fechaInicio])
+  @@index([empleadoId, origen])
 }
 
 model Finiquito {

@@ -23,6 +23,8 @@ import { calcularFiniquito } from "@/lib/nomina/finiquito";
 import { salarioBaseCotizacion } from "@/lib/fiscal/imss";
 import { generarPeriodos, type Periodicidad } from "@/lib/fiscal/periodicidad";
 import { diasVacacionesPorAntiguedad, PARAMETROS_2025 } from "@/lib/fiscal/tablas2025";
+import { generarIncidenciasDelPeriodo, registrarChecada } from "@/lib/checador/servicio";
+import { normalizarTelefono } from "@/lib/checador/whatsapp";
 
 export interface EstadoFormulario {
   error?: string;
@@ -89,6 +91,9 @@ export async function accionCrearEmpleado(
     PARAMETROS_2025.UMA_DIARIA,
   );
 
+  const telefonoRaw = opcional(datos, "telefonoWhatsapp");
+  const telefonoWhatsapp = telefonoRaw === null ? null : normalizarTelefono(telefonoRaw);
+
   try {
     const empleado = await prisma.empleado.create({
       data: {
@@ -115,6 +120,12 @@ export async function accionCrearEmpleado(
         descuentoInfonavitValor: opcional(datos, "descuentoInfonavitValor"),
         pensionAlimenticiaTipo: opcional(datos, "pensionAlimenticiaTipo"),
         pensionAlimenticiaValor: opcional(datos, "pensionAlimenticiaValor"),
+        telefonoWhatsapp: telefonoWhatsapp,
+        checadorActivo: telefonoWhatsapp !== null,
+        horaEntrada: texto(datos, "horaEntrada") || "09:00",
+        horaSalida: texto(datos, "horaSalida") || "18:00",
+        toleranciaMinutos: numero(datos, "toleranciaMinutos", 15),
+        diasLaborables: texto(datos, "diasLaborables") || "1,2,3,4,5",
       },
     });
 
@@ -156,6 +167,7 @@ export async function accionRegistrarIncidencia(
         fechaFin: fecha(texto(datos, "fechaFin")),
         cantidad: numero(datos, "cantidad", 1).toFixed(4),
         comentario: opcional(datos, "comentario"),
+        origen: "MANUAL",
       },
     });
     await registrarEvento({
@@ -177,6 +189,52 @@ export async function accionRegistrarIncidencia(
   }
   revalidatePath("/incidencias");
   return { mensaje: "Incidencia registrada." };
+}
+
+export async function accionRegistrarChecada(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const momento = texto(datos, "ocurridoEn");
+  if (momento === "") return { error: "Indica la fecha y hora de la checada." };
+
+  try {
+    const checada = await registrarChecada({
+      empleadoId: texto(datos, "empleadoId"),
+      tipo: texto(datos, "tipo") as "ENTRADA",
+      ocurridoEn: new Date(`${momento}:00.000Z`),
+      origen: "MANUAL",
+      actor: await actorDeSesion(sesion),
+    });
+    revalidatePath("/checador");
+    return { mensaje: `Checada de ${checada.empleado.nombre} registrada.` };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
+export async function accionGenerarIncidenciasChecador(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  try {
+    const resultados = await generarIncidenciasDelPeriodo(
+      sesion.empresaId,
+      texto(datos, "periodoId"),
+      await actorDeSesion(sesion),
+    );
+    const incidencias = resultados.reduce((total, r) => total + r.incidencias.length, 0);
+    revalidatePath("/checador");
+    revalidatePath("/incidencias");
+    revalidatePath("/nomina");
+    return {
+      mensaje: `${incidencias} incidencias derivadas de ${resultados.length} empleados.`,
+    };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
 }
 
 export async function accionGenerarCalendario(
