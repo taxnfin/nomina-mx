@@ -1,0 +1,410 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  ADMIN
+  NOMINISTA
+  AUDITOR
+}
+
+enum Periodicidad {
+  SEMANAL
+  CATORCENAL
+  QUINCENAL
+  MENSUAL
+}
+
+enum RegimenContratacion {
+  SUELDOS_SALARIOS
+  ASIMILADOS_MIEMBROS_SOCIEDADES
+  ASIMILADOS_COMISIONISTAS
+  ASIMILADOS_HONORARIOS
+  ASIMILADOS_ACCIONES
+  ASIMILADOS_OTROS
+  JUBILADOS
+}
+
+enum TipoJornada {
+  DIURNA
+  NOCTURNA
+  MIXTA
+  POR_HORA
+  REDUCIDA
+  CONTINUADA
+  PARTIDA
+  POR_TURNOS
+}
+
+enum TipoContrato {
+  INDETERMINADO
+  OBRA_DETERMINADA
+  TIEMPO_DETERMINADO
+  CAPACITACION_INICIAL
+  PRUEBA
+}
+
+enum TipoSalario {
+  FIJO
+  VARIABLE
+  MIXTO
+}
+
+enum EstadoEmpleado {
+  ACTIVO
+  BAJA
+  INCAPACIDAD
+  PERMISO
+}
+
+enum EstadoCorrida {
+  BORRADOR
+  CALCULADA
+  AUTORIZADA
+  TIMBRADA
+  PAGADA
+  CANCELADA
+}
+
+enum TipoConcepto {
+  PERCEPCION
+  DEDUCCION
+  OTRO_PAGO
+}
+
+enum TipoIncidencia {
+  FALTA
+  INCAPACIDAD_ENFERMEDAD
+  INCAPACIDAD_RIESGO
+  INCAPACIDAD_MATERNIDAD
+  PERMISO_SIN_GOCE
+  PERMISO_CON_GOCE
+  VACACIONES
+  HORAS_EXTRA_DOBLES
+  HORAS_EXTRA_TRIPLES
+  DIA_DESCANSO_TRABAJADO
+  PRIMA_DOMINICAL
+  DIA_FESTIVO_TRABAJADO
+}
+
+enum TipoSeparacion {
+  RENUNCIA
+  DESPIDO_JUSTIFICADO
+  DESPIDO_INJUSTIFICADO
+  TERMINO_CONTRATO
+  MUTUO_ACUERDO
+  DEFUNCION
+}
+
+model Empresa {
+  id                 String   @id @default(cuid())
+  razonSocial        String
+  rfc                String   @unique
+  regimenFiscal      String
+  codigoPostal       String
+  registroPatronal   String?
+  primaRiesgoTrabajo Decimal  @default(0.005) @db.Decimal(9, 6)
+  creadoEn           DateTime @default(now())
+  actualizadoEn      DateTime @updatedAt
+
+  usuarios   Usuario[]
+  empleados  Empleado[]
+  corridas   CorridaNomina[]
+  bitacora   RegistroBitacora[]
+  parametros ParametroFiscal[]
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre       String
+  email        String   @unique
+  hashPassword String
+  rol          Rol      @default(NOMINISTA)
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
+
+  corridasCreadas     CorridaNomina[] @relation("CorridaCreadaPor")
+  corridasAutorizadas CorridaNomina[] @relation("CorridaAutorizadaPor")
+}
+
+model Empleado {
+  id              String          @id @default(cuid())
+  empresaId       String
+  empresa         Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  numeroEmpleado  String
+  nombre          String
+  apellidoPaterno String
+  apellidoMaterno String?
+  rfc             String
+  curp            String
+  nss             String?
+  fechaNacimiento DateTime?
+  fechaIngreso    DateTime
+  fechaBaja       DateTime?
+  motivoBaja      TipoSeparacion?
+  estado          EstadoEmpleado  @default(ACTIVO)
+
+  puesto                 String
+  departamento           String?
+  registroPatronal       String?
+  claveEntidadFederativa String  @default("MEX")
+  banco                  String?
+  cuentaClabe            String?
+
+  periodicidad  Periodicidad
+  regimen       RegimenContratacion @default(SUELDOS_SALARIOS)
+  tipoContrato  TipoContrato        @default(INDETERMINADO)
+  tipoJornada   TipoJornada         @default(DIURNA)
+  tipoSalario   TipoSalario         @default(FIJO)
+  sindicalizado Boolean             @default(false)
+
+  /// Salario diario nominal (cuota diaria) en MXN.
+  salarioDiario           Decimal  @db.Decimal(14, 4)
+  /// Salario base de cotización IMSS (integrado).
+  salarioBaseCotizacion   Decimal  @db.Decimal(14, 4)
+  diasVacacionesExtra     Int      @default(0)
+  primaVacacionalPct      Decimal  @default(0.25) @db.Decimal(6, 4)
+  diasAguinaldo           Int      @default(15)
+  descuentoInfonavitTipo  String? // PORCENTAJE | CUOTA_FIJA | VSM
+  descuentoInfonavitValor Decimal? @db.Decimal(14, 4)
+  numeroCreditoInfonavit  String?
+  pensionAlimenticiaTipo  String? // PORCENTAJE | CUOTA_FIJA
+  pensionAlimenticiaValor Decimal? @db.Decimal(14, 4)
+
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  recibos           Recibo[]
+  incidencias       Incidencia[]
+  historialSalarios HistorialSalario[]
+  finiquitos        Finiquito[]
+
+  @@unique([empresaId, numeroEmpleado])
+  @@index([empresaId, estado])
+}
+
+model HistorialSalario {
+  id                    String   @id @default(cuid())
+  empleadoId            String
+  empleado              Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  vigenteDesde          DateTime
+  salarioDiario         Decimal  @db.Decimal(14, 4)
+  salarioBaseCotizacion Decimal  @db.Decimal(14, 4)
+  motivo                String?
+  creadoEn              DateTime @default(now())
+
+  @@index([empleadoId, vigenteDesde])
+}
+
+model PeriodoNomina {
+  id           String       @id @default(cuid())
+  ejercicio    Int
+  periodicidad Periodicidad
+  numero       Int
+  fechaInicio  DateTime
+  fechaFin     DateTime
+  fechaPago    DateTime
+  diasPeriodo  Int
+
+  corridas CorridaNomina[]
+
+  @@unique([ejercicio, periodicidad, numero])
+  @@index([ejercicio, periodicidad])
+}
+
+model CorridaNomina {
+  id          String        @id @default(cuid())
+  empresaId   String
+  empresa     Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  periodoId   String
+  periodo     PeriodoNomina @relation(fields: [periodoId], references: [id])
+  estado      EstadoCorrida @default(BORRADOR)
+  descripcion String?
+
+  totalPercepciones Decimal @default(0) @db.Decimal(16, 2)
+  totalDeducciones  Decimal @default(0) @db.Decimal(16, 2)
+  totalOtrosPagos   Decimal @default(0) @db.Decimal(16, 2)
+  totalNeto         Decimal @default(0) @db.Decimal(16, 2)
+  totalCuotasPatron Decimal @default(0) @db.Decimal(16, 2)
+
+  creadaPorId     String?
+  creadaPor       Usuario?  @relation("CorridaCreadaPor", fields: [creadaPorId], references: [id])
+  autorizadaPorId String?
+  autorizadaPor   Usuario?  @relation("CorridaAutorizadaPor", fields: [autorizadaPorId], references: [id])
+  autorizadaEn    DateTime?
+  pagadaEn        DateTime?
+
+  /// Snapshot inmutable de los parámetros fiscales usados al calcular.
+  parametrosSnapshot Json?
+
+  creadaEn      DateTime @default(now())
+  actualizadaEn DateTime @updatedAt
+
+  recibos Recibo[]
+
+  @@unique([empresaId, periodoId])
+  @@index([empresaId, estado])
+}
+
+model Recibo {
+  id         String        @id @default(cuid())
+  corridaId  String
+  corrida    CorridaNomina @relation(fields: [corridaId], references: [id], onDelete: Cascade)
+  empleadoId String
+  empleado   Empleado      @relation(fields: [empleadoId], references: [id])
+
+  diasPagados           Decimal @db.Decimal(9, 4)
+  salarioDiario         Decimal @db.Decimal(14, 4)
+  salarioBaseCotizacion Decimal @db.Decimal(14, 4)
+
+  totalPercepciones     Decimal @default(0) @db.Decimal(16, 2)
+  totalDeducciones      Decimal @default(0) @db.Decimal(16, 2)
+  totalOtrosPagos       Decimal @default(0) @db.Decimal(16, 2)
+  totalGravado          Decimal @default(0) @db.Decimal(16, 2)
+  totalExento           Decimal @default(0) @db.Decimal(16, 2)
+  isrRetenido           Decimal @default(0) @db.Decimal(16, 2)
+  subsidioCausado       Decimal @default(0) @db.Decimal(16, 2)
+  subsidioEntregado     Decimal @default(0) @db.Decimal(16, 2)
+  imssObrero            Decimal @default(0) @db.Decimal(16, 2)
+  imssPatron            Decimal @default(0) @db.Decimal(16, 2)
+  infonavitPatron       Decimal @default(0) @db.Decimal(16, 2)
+  retiroCesantiaVejez   Decimal @default(0) @db.Decimal(16, 2)
+  impuestoEstatalNomina Decimal @default(0) @db.Decimal(16, 2)
+  neto                  Decimal @default(0) @db.Decimal(16, 2)
+
+  /// Desglose completo y auditable del cálculo (memoria de cálculo).
+  memoriaCalculo Json
+
+  uuidCfdi      String?
+  fechaTimbrado DateTime?
+  xmlCfdi       String?
+
+  creadoEn DateTime @default(now())
+
+  conceptos ConceptoRecibo[]
+
+  @@unique([corridaId, empleadoId])
+  @@index([empleadoId])
+}
+
+model ConceptoRecibo {
+  id             String       @id @default(cuid())
+  reciboId       String
+  recibo         Recibo       @relation(fields: [reciboId], references: [id], onDelete: Cascade)
+  tipo           TipoConcepto
+  /// Clave del catálogo SAT (c_TipoPercepcion / c_TipoDeduccion / c_TipoOtroPago).
+  claveSat       String
+  clave          String
+  concepto       String
+  importeGravado Decimal      @default(0) @db.Decimal(16, 2)
+  importeExento  Decimal      @default(0) @db.Decimal(16, 2)
+  importe        Decimal      @default(0) @db.Decimal(16, 2)
+  orden          Int          @default(0)
+
+  @@index([reciboId, tipo])
+}
+
+model Incidencia {
+  id          String         @id @default(cuid())
+  empleadoId  String
+  empleado    Empleado       @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  tipo        TipoIncidencia
+  fechaInicio DateTime
+  fechaFin    DateTime
+  /// Cantidad en días u horas según el tipo de incidencia.
+  cantidad    Decimal        @db.Decimal(9, 4)
+  folio       String?
+  comentario  String?
+  aplicada    Boolean        @default(false)
+  creadaEn    DateTime       @default(now())
+
+  @@index([empleadoId, fechaInicio])
+}
+
+model Finiquito {
+  id                   String         @id @default(cuid())
+  empleadoId           String
+  empleado             Empleado       @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  tipoSeparacion       TipoSeparacion
+  fechaBaja            DateTime
+  incluyeIndemnizacion Boolean        @default(false)
+  totalPercepciones    Decimal        @db.Decimal(16, 2)
+  totalDeducciones     Decimal        @db.Decimal(16, 2)
+  neto                 Decimal        @db.Decimal(16, 2)
+  memoriaCalculo       Json
+  creadoEn             DateTime       @default(now())
+
+  @@index([empleadoId])
+}
+
+/// Parámetros fiscales vigentes por ejercicio (UMA, salario mínimo, cuotas IMSS, ISN).
+model ParametroFiscal {
+  id           String    @id @default(cuid())
+  empresaId    String?
+  empresa      Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  ejercicio    Int
+  clave        String
+  valor        Decimal   @db.Decimal(18, 8)
+  descripcion  String?
+  vigenteDesde DateTime
+  vigenteHasta DateTime?
+
+  @@unique([ejercicio, clave, empresaId])
+  @@index([ejercicio])
+}
+
+/// Renglones de las tarifas del Art. 96 LISR y del subsidio para el empleo.
+model TarifaIsr {
+  id             String       @id @default(cuid())
+  ejercicio      Int
+  periodicidad   Periodicidad
+  limiteInferior Decimal      @db.Decimal(16, 2)
+  limiteSuperior Decimal?     @db.Decimal(16, 2)
+  cuotaFija      Decimal      @db.Decimal(16, 2)
+  porcentaje     Decimal      @db.Decimal(9, 6)
+
+  @@index([ejercicio, periodicidad, limiteInferior])
+}
+
+model TablaSubsidio {
+  id             String       @id @default(cuid())
+  ejercicio      Int
+  periodicidad   Periodicidad
+  limiteInferior Decimal      @db.Decimal(16, 2)
+  limiteSuperior Decimal?     @db.Decimal(16, 2)
+  subsidio       Decimal      @db.Decimal(16, 2)
+
+  @@index([ejercicio, periodicidad, limiteInferior])
+}
+
+/// Bitácora append-only encadenada por hash (trazabilidad).
+model RegistroBitacora {
+  id           String   @id @default(cuid())
+  empresaId    String?
+  empresa      Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  secuencia    Int      @unique @default(autoincrement())
+  ocurridoEn   DateTime @default(now())
+  actorId      String?
+  actorEmail   String?
+  actorRol     String?
+  accion       String
+  entidad      String
+  entidadId    String?
+  /// Estado anterior y posterior de la entidad afectada.
+  datosAntes   Json?
+  datosDespues Json?
+  ip           String?
+  userAgent    String?
+  hashPrevio   String
+  hash         String   @unique
+
+  @@index([empresaId, entidad, entidadId])
+  @@index([ocurridoEn])
+}

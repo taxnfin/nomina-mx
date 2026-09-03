@@ -1,0 +1,91 @@
+/** Claves de los catálogos del complemento de nómina 1.2 del CFDI 4.0. */
+
+export const PERCEPCION = {
+  SUELDOS: "001",
+  GRATIFICACION_ANUAL: "002",
+  PARTICIPACION_UTILIDADES: "003",
+  PRIMA_VACACIONAL: "021",
+  PRIMA_DOMINICAL: "020",
+  PRIMA_ANTIGUEDAD: "022",
+  PAGOS_SEPARACION: "023",
+  HORAS_EXTRA: "019",
+  SUBSIDIO_INCAPACIDAD: "014",
+  VACACIONES_NO_DISFRUTADAS: "046",
+  OTROS_INGRESOS_SALARIOS: "038",
+  PREMIOS_PUNTUALIDAD: "010",
+  PREMIOS_ASISTENCIA: "013",
+  BONOS: "029",
+} as const;
+
+export const DEDUCCION = {
+  SEGURIDAD_SOCIAL: "001",
+  ISR: "002",
+  APORTACIONES_RETIRO: "003",
+  OTROS: "004",
+  DESCUENTO_INCAPACIDAD: "006",
+  PENSION_ALIMENTICIA: "007",
+  CREDITO_INFONAVIT: "010",
+  ANTICIPO_SALARIOS: "004",
+  AUSENCIA: "020",
+  CUOTA_SINDICAL: "019",
+  AJUSTE_SUBSIDIO_ENTREGADO: "071",
+  AJUSTE_ISR: "101",
+} as const;
+
+export const OTRO_PAGO = {
+  REINTEGRO_ISR: "001",
+  SUBSIDIO_EMPLEO: "002",
+  VIATICOS: "003",
+  APLICACION_SALDO_FAVOR: "004",
+} as const;
+
+export const TIPO_NOMINA = {
+  ORDINARIA: "O",
+  EXTRAORDINARIA: "E",
+} as const;
+
+/** c_TipoContrato */
+export const CLAVE_TIPO_CONTRATO: Record<string, string> = {
+  INDETERMINADO: "01",
+  OBRA_DETERMINADA: "02",
+  TIEMPO_DETERMINADO: "03",
+  CAPACITACION_INICIAL: "04",
+  PRUEBA: "05",
+};
+
+/** c_TipoJornada */
+export const CLAVE_TIPO_JORNADA: Record<string, string> = {
+  DIURNA: "01",
+  NOCTURNA: "02",
+  MIXTA: "03",
+  POR_HORA: "04",
+  REDUCIDA: "05",
+  CONTINUADA: "06",
+  PARTIDA: "07",
+  POR_TURNOS: "08",
+};
+
+/** c_TipoRegimen */
+export const CLAVE_REGIMEN: Record<string, string> = {
+  SUELDOS_SALARIOS: "02",
+  JUBILADOS: "03",
+  ASIMILADOS_MIEMBROS_SOCIEDADES: "05",
+  ASIMILADOS_COMISIONISTAS: "06",
+  ASIMILADOS_HONORARIOS: "07",
+  ASIMILADOS_ACCIONES: "08",
+  ASIMILADOS_OTROS: "09",
+};
+
+/** c_TipoHoras */
+export const TIPO_HORAS = {
+  DOBLES: "01",
+  TRIPLES: "02",
+  SIMPLES: "03",
+} as const;
+
+/** c_TipoIncapacidad */
+export const CLAVE_INCAPACIDAD: Record<string, string> = {
+  INCAPACIDAD_RIESGO: "01",
+  INCAPACIDAD_ENFERMEDAD: "02",
+  INCAPACIDAD_MATERNIDAD: "03",
+};
