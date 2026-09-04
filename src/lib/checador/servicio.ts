@@ -2,6 +2,7 @@ import type { OrigenChecada, TipoChecada, TipoIncidencia } from "@prisma/client"
 import { registrarEvento } from "../auditoria/bitacora";
 import { prisma } from "../db";
 import type { Actor } from "../nomina/servicio";
+import { evaluarUbicacion, type EvaluacionUbicacion } from "./geocerca";
 import { diasLaborablesDesdeTexto, resumirAsistencia, type ResumenAsistencia } from "./jornada";
 import { variantesTelefono } from "./whatsapp";
 
@@ -12,6 +13,15 @@ export interface ChecadaRegistrada {
   tipo: TipoChecada;
   ocurridoEn: Date;
   duplicada: boolean;
+  ubicacion: EvaluacionUbicacion;
+}
+
+/** La geocerca está configurada y el empleado no mandó su ubicación. */
+export class UbicacionRequeridaError extends Error {
+  constructor() {
+    super("El checador exige compartir la ubicación.");
+    this.name = "UbicacionRequeridaError";
+  }
 }
 
 /** Registra una checada; los reintentos del webhook se descartan por `mensajeId`. */
@@ -29,7 +39,32 @@ export async function registrarChecada(entrada: {
 }): Promise<ChecadaRegistrada> {
   const empleado = await prisma.empleado.findUniqueOrThrow({
     where: { id: entrada.empleadoId },
-    select: { id: true, empresaId: true, nombre: true, apellidoPaterno: true },
+    select: {
+      id: true,
+      empresaId: true,
+      nombre: true,
+      apellidoPaterno: true,
+      latitudCentro: true,
+      longitudCentro: true,
+      radioMetros: true,
+      exigeUbicacion: true,
+    },
+  });
+
+  const ubicacion =
+    entrada.latitud != null && entrada.longitud != null
+      ? { latitud: entrada.latitud, longitud: entrada.longitud }
+      : null;
+  const evaluacion = evaluarUbicacion(ubicacion, {
+    centro:
+      empleado.latitudCentro && empleado.longitudCentro
+        ? {
+            latitud: Number(empleado.latitudCentro),
+            longitud: Number(empleado.longitudCentro),
+          }
+        : null,
+    radioMetros: empleado.radioMetros,
+    exigeUbicacion: empleado.exigeUbicacion,
   });
 
   if (entrada.mensajeId) {
@@ -40,9 +75,12 @@ export async function registrarChecada(entrada: {
         tipo: previa.tipo,
         ocurridoEn: previa.ocurridoEn,
         duplicada: true,
+        ubicacion: evaluacion,
       };
     }
   }
+
+  if (evaluacion.faltaUbicacion) throw new UbicacionRequeridaError();
 
   const ocurridoEn = entrada.ocurridoEn ?? new Date();
   const checada = await prisma.checada.create({
@@ -56,6 +94,8 @@ export async function registrarChecada(entrada: {
       textoMensaje: entrada.textoMensaje ?? null,
       latitud: entrada.latitud?.toFixed(6) ?? null,
       longitud: entrada.longitud?.toFixed(6) ?? null,
+      distanciaMetros: evaluacion.distanciaMetros,
+      fueraDeRango: evaluacion.fueraDeRango,
     },
   });
 
@@ -72,6 +112,8 @@ export async function registrarChecada(entrada: {
       tipo: checada.tipo,
       origen: checada.origen,
       ocurridoEn: checada.ocurridoEn.toISOString(),
+      distanciaMetros: checada.distanciaMetros,
+      fueraDeRango: checada.fueraDeRango,
     },
   });
 
@@ -80,6 +122,7 @@ export async function registrarChecada(entrada: {
     tipo: checada.tipo,
     ocurridoEn: checada.ocurridoEn,
     duplicada: false,
+    ubicacion: evaluacion,
   };
 }
 

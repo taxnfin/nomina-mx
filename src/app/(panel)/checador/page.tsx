@@ -1,4 +1,5 @@
 import {
+  accionConfigurarGeocerca,
   accionGenerarIncidenciasChecador,
   accionRegistrarChecada,
 } from "@/app/acciones";
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
 const TIPOS = ["ENTRADA", "SALIDA", "INICIO_COMIDA", "FIN_COMIDA"];
 
 const momento = (fecha: Date) => fecha.toISOString().replace("T", " ").slice(0, 16);
+
+const mapa = (latitud: string, longitud: string) =>
+  `https://www.google.com/maps?q=${latitud},${longitud}`;
 
 export default async function PaginaChecador({
   searchParams,
@@ -192,6 +196,76 @@ export default async function PaginaChecador({
       </Tarjeta>
 
       <Tarjeta
+        titulo="Centro de trabajo y geocerca"
+        descripcion="Las checadas con ubicación se comparan contra estas coordenadas; fuera del radio quedan marcadas para revisión."
+      >
+        <Formulario accion={accionConfigurarGeocerca} textoBoton="Guardar geocerca">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <Seleccion
+              etiqueta="Empleado"
+              nombre="empleadoId"
+              requerido
+              opciones={empleados.map((e) => ({
+                valor: e.id,
+                texto: `${e.numeroEmpleado} · ${e.nombre} ${e.apellidoPaterno}`,
+              }))}
+            />
+            <Campo etiqueta="Latitud del centro" nombre="latitudCentro" />
+            <Campo etiqueta="Longitud del centro" nombre="longitudCentro" />
+            <Campo
+              etiqueta="Radio permitido (m)"
+              nombre="radioMetros"
+              tipo="number"
+              valorInicial={200}
+            />
+            <Seleccion
+              etiqueta="Exigir ubicación"
+              nombre="exigeUbicacion"
+              opciones={[
+                { valor: "NO", texto: "No, opcional" },
+                { valor: "SI", texto: "Sí, rechazar sin ubicación" },
+              ]}
+            />
+          </div>
+        </Formulario>
+
+        {conChecador.length === 0 ? null : (
+          <div className="mt-4">
+            <Tabla encabezados={["Empleado", "Centro de trabajo", "Radio", "Ubicación"]}>
+              {conChecador.map((empleado) => (
+                <tr key={empleado.id}>
+                  <td className="px-3 py-2">
+                    {empleado.numeroEmpleado} · {empleado.nombre} {empleado.apellidoPaterno}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-slate-500">
+                    {empleado.latitudCentro && empleado.longitudCentro ? (
+                      <a
+                        className="underline"
+                        href={mapa(
+                          empleado.latitudCentro.toString(),
+                          empleado.longitudCentro.toString(),
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {empleado.latitudCentro.toString()}, {empleado.longitudCentro.toString()}
+                      </a>
+                    ) : (
+                      "Sin geocerca"
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{empleado.radioMetros} m</td>
+                  <td className="px-3 py-2">
+                    <Etiqueta valor={empleado.exigeUbicacion ? "OBLIGATORIA" : "OPCIONAL"} />
+                  </td>
+                </tr>
+              ))}
+            </Tabla>
+          </div>
+        )}
+      </Tarjeta>
+
+      <Tarjeta
         titulo="Checada manual"
         descripcion="Para correcciones: queda marcada como MANUAL y también se sella en la bitácora."
       >
@@ -220,7 +294,17 @@ export default async function PaginaChecador({
         {checadas.length === 0 ? (
           <Vacio texto="Sin checadas registradas." />
         ) : (
-          <Tabla encabezados={["Empleado", "Tipo", "Momento", "Origen", "Teléfono", "Ubicación"]}>
+          <Tabla
+            encabezados={[
+              "Empleado",
+              "Tipo",
+              "Momento",
+              "Origen",
+              "Teléfono",
+              "Ubicación",
+              "Distancia",
+            ]}
+          >
             {checadas.map((checada) => (
               <tr key={checada.id}>
                 <td className="px-3 py-2">
@@ -233,9 +317,27 @@ export default async function PaginaChecador({
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500">{checada.telefono ?? "—"}</td>
                 <td className="px-3 py-2 text-xs text-slate-500">
-                  {checada.latitud && checada.longitud
-                    ? `${checada.latitud}, ${checada.longitud}`
-                    : "—"}
+                  {checada.latitud && checada.longitud ? (
+                    <a
+                      className="underline"
+                      href={mapa(checada.latitud.toString(), checada.longitud.toString())}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Ver mapa
+                    </a>
+                  ) : (
+                    "Sin ubicación"
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs">
+                  {checada.distanciaMetros === null ? (
+                    <span className="text-slate-500">—</span>
+                  ) : (
+                    <span className={checada.fueraDeRango ? "font-medium text-red-600" : ""}>
+                      {checada.distanciaMetros} m{checada.fueraDeRango ? " · fuera de rango" : ""}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

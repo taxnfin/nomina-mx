@@ -170,6 +170,18 @@ export default async function PaginaEmpleados() {
               valorInicial="1,2,3,4,5"
               ayuda="1=lunes … 7=domingo."
             />
+            <Campo
+              etiqueta="Latitud del centro de trabajo"
+              nombre="latitudCentro"
+              ayuda="Opcional; con coordenadas se valida la distancia de cada checada."
+            />
+            <Campo etiqueta="Longitud del centro de trabajo" nombre="longitudCentro" />
+            <Campo
+              etiqueta="Radio permitido (m)"
+              nombre="radioMetros"
+              tipo="number"
+              valorInicial={200}
+            />
           </div>
         </Formulario>
       </Tarjeta>

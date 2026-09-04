@@ -66,9 +66,18 @@ LFT), prima dominical y días de descanso trabajados se escriben como incidencia
 intactas— y está bloqueado si la corrida del periodo ya se autorizó. Tanto las checadas como la
 derivación se sellan en la bitácora.
 
-Configuración por empleado: teléfono de WhatsApp, horario contractual, tolerancia y días
-laborables. Variables de entorno en `.env.example`; sin `TWILIO_AUTH_TOKEN` el webhook responde
-503.
+### Geocerca
+
+Cada empleado puede tener las coordenadas de su centro de trabajo y un radio permitido. Cuando la
+checada trae ubicación se calcula la distancia (haversine) y se guarda junto con la marca de fuera
+de rango; el acuse de WhatsApp avisa cuántos metros quedó del centro y la pantalla **Checador** la
+enlaza al mapa. Con "exigir ubicación" activado, un mensaje sin ubicación no se registra y el
+empleado recibe la instrucción para compartirla. Sin coordenadas configuradas la ubicación se
+conserva solo como evidencia.
+
+Configuración por empleado: teléfono de WhatsApp, horario contractual, tolerancia, días
+laborables, centro de trabajo y radio. Variables de entorno en `.env.example`; sin
+`TWILIO_AUTH_TOKEN` el webhook responde 503.
 
 ## Trazabilidad
 

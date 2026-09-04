@@ -126,6 +126,10 @@ export async function accionCrearEmpleado(
         horaSalida: texto(datos, "horaSalida") || "18:00",
         toleranciaMinutos: numero(datos, "toleranciaMinutos", 15),
         diasLaborables: texto(datos, "diasLaborables") || "1,2,3,4,5",
+        latitudCentro: opcional(datos, "latitudCentro"),
+        longitudCentro: opcional(datos, "longitudCentro"),
+        radioMetros: numero(datos, "radioMetros", 200),
+        exigeUbicacion: texto(datos, "exigeUbicacion") === "SI",
       },
     });
 
@@ -212,6 +216,70 @@ export async function accionRegistrarChecada(
   } catch (error) {
     return { error: mensajeError(error) };
   }
+}
+
+/** Centro de trabajo y radio permitido para las checadas de un empleado. */
+export async function accionConfigurarGeocerca(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const empleadoId = texto(datos, "empleadoId");
+  const latitud = opcional(datos, "latitudCentro");
+  const longitud = opcional(datos, "longitudCentro");
+  const exigeUbicacion = texto(datos, "exigeUbicacion") === "SI";
+
+  if ((latitud === null) !== (longitud === null)) {
+    return { error: "Captura latitud y longitud juntas." };
+  }
+  if (latitud === null && exigeUbicacion) {
+    return { error: "Para exigir ubicación primero define el centro de trabajo." };
+  }
+
+  const radioMetros = numero(datos, "radioMetros", 200);
+  if (radioMetros <= 0) return { error: "El radio debe ser mayor a cero." };
+
+  try {
+    const previo = await prisma.empleado.findFirstOrThrow({
+      where: { id: empleadoId, empresaId: sesion.empresaId },
+    });
+    const empleado = await prisma.empleado.update({
+      where: { id: previo.id },
+      data: {
+        latitudCentro: latitud,
+        longitudCentro: longitud,
+        radioMetros,
+        exigeUbicacion,
+      },
+    });
+
+    await registrarEvento({
+      empresaId: sesion.empresaId,
+      actorId: sesion.usuarioId,
+      actorEmail: sesion.email,
+      actorRol: sesion.rol,
+      accion: "GEOCERCA_ACTUALIZADA",
+      entidad: "Empleado",
+      entidadId: empleado.id,
+      datosAntes: {
+        latitudCentro: previo.latitudCentro?.toString() ?? null,
+        longitudCentro: previo.longitudCentro?.toString() ?? null,
+        radioMetros: previo.radioMetros,
+        exigeUbicacion: previo.exigeUbicacion,
+      },
+      datosDespues: {
+        latitudCentro: empleado.latitudCentro?.toString() ?? null,
+        longitudCentro: empleado.longitudCentro?.toString() ?? null,
+        radioMetros: empleado.radioMetros,
+        exigeUbicacion: empleado.exigeUbicacion,
+      },
+    });
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+
+  revalidatePath("/checador");
+  return { mensaje: "Geocerca actualizada." };
 }
 
 export async function accionGenerarIncidenciasChecador(

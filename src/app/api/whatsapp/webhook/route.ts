@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  UbicacionRequeridaError,
   empleadoPorTelefono,
   registrarChecada,
 } from "@/lib/checador/servicio";
@@ -65,15 +66,26 @@ export async function POST(peticion: Request) {
   const latitud = parametros.Latitude ? Number(parametros.Latitude) : null;
   const longitud = parametros.Longitude ? Number(parametros.Longitude) : null;
 
-  const checada = await registrarChecada({
-    empleadoId: empleado.id,
-    tipo: comando.tipo,
-    telefono,
-    mensajeId: parametros.MessageSid ?? null,
-    textoMensaje: parametros.Body ?? null,
-    latitud: Number.isFinite(latitud) ? latitud : null,
-    longitud: Number.isFinite(longitud) ? longitud : null,
-  });
+  let checada;
+  try {
+    checada = await registrarChecada({
+      empleadoId: empleado.id,
+      tipo: comando.tipo,
+      telefono,
+      mensajeId: parametros.MessageSid ?? null,
+      textoMensaje: parametros.Body ?? null,
+      latitud: Number.isFinite(latitud) ? latitud : null,
+      longitud: Number.isFinite(longitud) ? longitud : null,
+    });
+  } catch (error) {
+    if (error instanceof UbicacionRequeridaError) {
+      return twiml(
+        "Para checar necesitas compartir tu ubicación: usa el clip → Ubicación → Enviar ubicación actual, " +
+          "con el mensaje (ENTRADA, SALIDA, COMIDA o REGRESO).",
+      );
+    }
+    throw error;
+  }
 
   if (checada.duplicada) {
     return twiml(
@@ -81,7 +93,11 @@ export async function POST(peticion: Request) {
     );
   }
 
+  const aviso = checada.ubicacion.fueraDeRango
+    ? ` Se registró a ${checada.ubicacion.distanciaMetros} m del centro de trabajo y quedará marcada para revisión.`
+    : "";
+
   return twiml(
-    `${ETIQUETAS[checada.tipo]} registrada a las ${hora(checada.ocurridoEn)}. Gracias, ${empleado.nombre}.`,
+    `${ETIQUETAS[checada.tipo]} registrada a las ${hora(checada.ocurridoEn)}. Gracias, ${empleado.nombre}.${aviso}`,
   );
 }

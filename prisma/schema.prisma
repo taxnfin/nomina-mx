@@ -179,6 +179,11 @@ model Empleado {
   toleranciaMinutos Int     @default(15)
   /// Días laborables como números ISO separados por coma (1=lunes … 7=domingo).
   diasLaborables    String  @default("1,2,3,4,5")
+  /// Geocerca del centro de trabajo; sin coordenadas no se valida la distancia.
+  latitudCentro     Decimal? @db.Decimal(10, 6)
+  longitudCentro    Decimal? @db.Decimal(10, 6)
+  radioMetros       Int      @default(200)
+  exigeUbicacion    Boolean  @default(false)
 
   periodicidad  Periodicidad
   regimen       RegimenContratacion @default(SUELDOS_SALARIOS)
@@ -228,6 +233,9 @@ model Checada {
   textoMensaje String?
   latitud      Decimal?      @db.Decimal(10, 6)
   longitud     Decimal?      @db.Decimal(10, 6)
+  /// Distancia a la geocerca del empleado al momento de checar.
+  distanciaMetros Int?
+  fueraDeRango    Boolean    @default(false)
   registradaEn DateTime      @default(now())
 
   @@index([empleadoId, ocurridoEn])
