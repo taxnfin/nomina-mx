@@ -4,6 +4,7 @@ import {
   accionRegistrarChecada,
 } from "@/app/acciones";
 import { Formulario } from "@/components/formulario";
+import { SelectorUbicacion } from "@/components/selector-ubicacion";
 import { Campo, Etiqueta, Metrica, Seleccion, Tabla, Tarjeta, Vacio } from "@/components/ui";
 import { requerirSesion } from "@/lib/auth/sesion";
 import { diasLaborablesDesdeTexto, resumirAsistencia } from "@/lib/checador/jornada";
@@ -200,7 +201,7 @@ export default async function PaginaChecador({
         descripcion="Las checadas con ubicación se comparan contra estas coordenadas; fuera del radio quedan marcadas para revisión."
       >
         <Formulario accion={accionConfigurarGeocerca} textoBoton="Guardar geocerca">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Seleccion
               etiqueta="Empleado"
               nombre="empleadoId"
@@ -209,14 +210,6 @@ export default async function PaginaChecador({
                 valor: e.id,
                 texto: `${e.numeroEmpleado} · ${e.nombre} ${e.apellidoPaterno}`,
               }))}
-            />
-            <Campo etiqueta="Latitud del centro" nombre="latitudCentro" />
-            <Campo etiqueta="Longitud del centro" nombre="longitudCentro" />
-            <Campo
-              etiqueta="Radio permitido (m)"
-              nombre="radioMetros"
-              tipo="number"
-              valorInicial={200}
             />
             <Seleccion
               etiqueta="Exigir ubicación"
@@ -227,6 +220,7 @@ export default async function PaginaChecador({
               ]}
             />
           </div>
+          <SelectorUbicacion />
         </Formulario>
 
         {conChecador.length === 0 ? null : (

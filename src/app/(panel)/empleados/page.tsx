@@ -1,5 +1,6 @@
 import { accionCrearEmpleado } from "@/app/acciones";
 import { Formulario } from "@/components/formulario";
+import { SelectorUbicacion } from "@/components/selector-ubicacion";
 import { Campo, Etiqueta, Seleccion, Tabla, Tarjeta, Vacio } from "@/components/ui";
 import { requerirSesion } from "@/lib/auth/sesion";
 import { prisma } from "@/lib/db";
@@ -170,18 +171,12 @@ export default async function PaginaEmpleados() {
               valorInicial="1,2,3,4,5"
               ayuda="1=lunes … 7=domingo."
             />
-            <Campo
-              etiqueta="Latitud del centro de trabajo"
-              nombre="latitudCentro"
-              ayuda="Opcional; con coordenadas se valida la distancia de cada checada."
-            />
-            <Campo etiqueta="Longitud del centro de trabajo" nombre="longitudCentro" />
-            <Campo
-              etiqueta="Radio permitido (m)"
-              nombre="radioMetros"
-              tipo="number"
-              valorInicial={200}
-            />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">
+              Centro de trabajo (opcional)
+            </p>
+            <SelectorUbicacion />
           </div>
         </Formulario>
       </Tarjeta>
