@@ -12,6 +12,7 @@ import {
   normalizar,
   normalizarTelefono,
   respuestaTwiml,
+  variantesTelefono,
 } from "../src/lib/checador/whatsapp";
 
 const HORARIO = {
@@ -59,6 +60,19 @@ describe("interpretación de mensajes de WhatsApp", () => {
   it("normaliza el teléfono de Twilio a E.164", () => {
     expect(normalizarTelefono("whatsapp:+52 155 1234 5678")).toBe("+5215512345678");
     expect(normalizarTelefono("5215512345678")).toBe("+5215512345678");
+  });
+
+  it("reconoce el mismo número mexicano capturado de distintas formas", () => {
+    const desdeWhatsapp = variantesTelefono("whatsapp:+5218182546645");
+    expect(desdeWhatsapp).toContain("+5218182546645");
+    expect(desdeWhatsapp).toContain("+528182546645");
+    expect(desdeWhatsapp).toContain("+8182546645");
+
+    const capturadoLocal = variantesTelefono("8182546645");
+    expect(capturadoLocal).toContain("+5218182546645");
+    expect(capturadoLocal).toContain("+528182546645");
+
+    expect(variantesTelefono("+14155238886")).toEqual(["+14155238886"]);
   });
 
   it("escapa el TwiML de respuesta", () => {

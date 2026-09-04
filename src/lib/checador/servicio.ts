@@ -3,6 +3,7 @@ import { registrarEvento } from "../auditoria/bitacora";
 import { prisma } from "../db";
 import type { Actor } from "../nomina/servicio";
 import { diasLaborablesDesdeTexto, resumirAsistencia, type ResumenAsistencia } from "./jornada";
+import { variantesTelefono } from "./whatsapp";
 
 export const ORIGEN_CHECADOR = "CHECADOR";
 
@@ -84,7 +85,11 @@ export async function registrarChecada(entrada: {
 
 export async function empleadoPorTelefono(telefono: string) {
   return prisma.empleado.findFirst({
-    where: { telefonoWhatsapp: telefono, checadorActivo: true, estado: { not: "BAJA" } },
+    where: {
+      telefonoWhatsapp: { in: variantesTelefono(telefono) },
+      checadorActivo: true,
+      estado: { not: "BAJA" },
+    },
   });
 }
 

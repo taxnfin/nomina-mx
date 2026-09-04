@@ -58,6 +58,30 @@ export function normalizarTelefono(numero: string): string {
 }
 
 /**
+ * Formas equivalentes de un mismo número mexicano: capturado a 10 dígitos, con
+ * lada 52 y con el 1 que WhatsApp conserva para México (+521...).
+ */
+export function variantesTelefono(numero: string): string[] {
+  const digitos = normalizarTelefono(numero).slice(1);
+  const variantes = new Set<string>([`+${digitos}`]);
+
+  if (digitos.length === 10) {
+    variantes.add(`+52${digitos}`);
+    variantes.add(`+521${digitos}`);
+  }
+  if (digitos.startsWith("521") && digitos.length === 13) {
+    variantes.add(`+52${digitos.slice(3)}`);
+    variantes.add(`+${digitos.slice(3)}`);
+  }
+  if (digitos.startsWith("52") && digitos.length === 12) {
+    variantes.add(`+521${digitos.slice(2)}`);
+    variantes.add(`+${digitos.slice(2)}`);
+  }
+
+  return [...variantes];
+}
+
+/**
  * Firma de Twilio: HMAC-SHA1 sobre la URL concatenada con los parámetros del
  * cuerpo ordenados alfabéticamente (clave y valor pegados), en base64.
  * https://www.twilio.com/docs/usage/security#validating-requests
