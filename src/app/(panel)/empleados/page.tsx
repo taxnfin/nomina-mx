@@ -1,5 +1,6 @@
 import { accionCrearEmpleado } from "@/app/acciones";
 import { Formulario } from "@/components/formulario";
+import { SelectorUbicacion } from "@/components/selector-ubicacion";
 import { Campo, Etiqueta, Seleccion, Tabla, Tarjeta, Vacio } from "@/components/ui";
 import { requerirSesion } from "@/lib/auth/sesion";
 import { prisma } from "@/lib/db";
@@ -151,6 +152,31 @@ export default async function PaginaEmpleados() {
               tipo="number"
               paso="0.0001"
             />
+            <Campo
+              etiqueta="WhatsApp del checador"
+              nombre="telefonoWhatsapp"
+              ayuda="E.164, p. ej. +5215512345678. Al capturarlo se activa el checador."
+            />
+            <Campo etiqueta="Hora de entrada" nombre="horaEntrada" tipo="time" valorInicial="09:00" />
+            <Campo etiqueta="Hora de salida" nombre="horaSalida" tipo="time" valorInicial="18:00" />
+            <Campo
+              etiqueta="Tolerancia (minutos)"
+              nombre="toleranciaMinutos"
+              tipo="number"
+              valorInicial={15}
+            />
+            <Campo
+              etiqueta="Días laborables"
+              nombre="diasLaborables"
+              valorInicial="1,2,3,4,5"
+              ayuda="1=lunes … 7=domingo."
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-slate-700">
+              Centro de trabajo (opcional)
+            </p>
+            <SelectorUbicacion />
           </div>
         </Formulario>
       </Tarjeta>

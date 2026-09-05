@@ -296,6 +296,45 @@ async function main() {
     }
   }
 
+  const analista = await prisma.empleado.findUnique({
+    where: { empresaId_numeroEmpleado: { empresaId: empresa.id, numeroEmpleado: "0006" } },
+  });
+  if (analista) {
+    await prisma.empleado.update({
+      where: { id: analista.id },
+      data: { telefonoWhatsapp: "+5215500000006", checadorActivo: true },
+    });
+
+    if ((await prisma.checada.count({ where: { empleadoId: analista.id } })) === 0) {
+      // Primera quincena de enero: una falta el día 8 y dos horas extra el día 9.
+      const jornadas: { dia: number; entrada: string; salida: string }[] = [
+        { dia: 6, entrada: "09:05", salida: "18:02" },
+        { dia: 7, entrada: "09:31", salida: "18:10" },
+        { dia: 9, entrada: "08:58", salida: "20:00" },
+        { dia: 10, entrada: "09:03", salida: "18:05" },
+        { dia: 13, entrada: "09:00", salida: "18:00" },
+        { dia: 14, entrada: "09:12", salida: "18:30" },
+        { dia: 15, entrada: "09:00", salida: "18:00" },
+      ];
+      await prisma.checada.createMany({
+        data: jornadas.flatMap(({ dia, entrada, salida }) =>
+          [
+            { tipo: "ENTRADA" as const, hora: entrada },
+            { tipo: "SALIDA" as const, hora: salida },
+          ].map(({ tipo, hora }) => ({
+            empleadoId: analista.id,
+            tipo,
+            ocurridoEn: new Date(`${EJERCICIO}-01-${String(dia).padStart(2, "0")}T${hora}:00.000Z`),
+            origen: "WHATSAPP" as const,
+            telefono: "+5215500000006",
+            mensajeId: `SEED-${dia}-${tipo}`,
+            textoMensaje: tipo === "ENTRADA" ? "entrada" : "salida",
+          })),
+        ),
+      });
+    }
+  }
+
   console.log("Semilla aplicada:", {
     empresa: empresa.razonSocial,
     usuarios: usuarios.map((u) => u.email),
