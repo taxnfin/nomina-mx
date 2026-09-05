@@ -39,11 +39,17 @@ export default async function PaginaObligaciones({
   const ejercicio = Number(filtros.ejercicio) || hoy.getUTCFullYear();
   const mes = filtros.mes !== undefined ? Number(filtros.mes) : hoy.getUTCMonth();
 
-  const [datos, empresa, repse] = await Promise.all([
+  const [datos, configuraciones, repse] = await Promise.all([
     obligacionesDelMes(sesion.empresaId, ejercicio, mes),
-    prisma.empresa.findUniqueOrThrow({ where: { id: sesion.empresaId } }),
+    prisma.configuracionIsn.findMany({
+      where: { empresaId: sesion.empresaId },
+      orderBy: { vigenteDesde: "desc" },
+    }),
     prisma.registroRepse.findUnique({ where: { empresaId: sesion.empresaId } }),
   ]);
+
+  const ultima = configuraciones.at(0);
+  const diaIso = (dato: Date) => dato.toISOString().slice(0, 10);
 
   const isn = datos.isn;
   const calendario = calendarioDeObligaciones(ejercicio, {
@@ -107,22 +113,30 @@ export default async function PaginaObligaciones({
         <Metrica
           etiqueta="ISN del mes"
           valor={formatoMxn(datos.totalIsn)}
-          nota={`${isn.nombre} · ${pct(isn.tasa)}`}
+          nota={`${isn.nombre} · ${pct(isn.tasa)}${datos.isnVigenteDesde ? ` · vigente desde ${diaIso(datos.isnVigenteDesde)}` : ""}`}
         />
       </div>
 
       <Tarjeta
         titulo="Impuesto sobre nóminas de la empresa"
-        descripcion={`Cada entidad legisla su propia tasa y fecha de pago. Si dejas la tasa vacía se usa la del catálogo (${isn.nombre}: ${pct(isn.tasa)}, día ${isn.diaLimite} del mes siguiente).${isn.nota ? ` ${isn.nota}` : ""}`}
+        descripcion={`Cada configuración aplica desde la fecha que indiques: los meses anteriores conservan la que estuvo vigente. Si dejas la tasa vacía se usa la del catálogo (${isn.nombre}: ${pct(isn.tasa)}, día ${isn.diaLimite} del mes siguiente).${isn.nota ? ` ${isn.nota}` : ""}`}
       >
         {sesion.rol === "ADMIN" ? (
           <Formulario accion={accionGuardarConfiguracionIsn} textoBoton="Guardar ISN">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <Campo
+                etiqueta="Vigente desde"
+                nombre="vigenteDesde"
+                tipo="date"
+                valorInicial={diaIso(new Date(Date.UTC(ejercicio, mes, 1)))}
+                requerido
+                ayuda="Aplica a partir de esta fecha"
+              />
               <Seleccion
                 etiqueta="Entidad federativa"
                 nombre="claveEntidadIsn"
                 opciones={OPCIONES_ENTIDAD_ISN}
-                valorInicial={empresa.claveEntidadIsn}
+                valorInicial={ultima?.claveEntidadIsn ?? isn.clave}
                 requerido
               />
               <Campo
@@ -132,7 +146,7 @@ export default async function PaginaObligaciones({
                 paso="0.0001"
                 minimo={0}
                 maximo={100}
-                valorInicial={empresa.tasaIsn ? Number(empresa.tasaIsn) * 100 : ""}
+                valorInicial={ultima?.tasaIsn ? Number(ultima.tasaIsn) * 100 : ""}
                 ayuda="Vacío = tasa del catálogo estatal"
               />
               <Campo
@@ -142,7 +156,7 @@ export default async function PaginaObligaciones({
                 paso="0.0001"
                 minimo={0}
                 maximo={100}
-                valorInicial={empresa.sobretasaIsn ? Number(empresa.sobretasaIsn) * 100 : ""}
+                valorInicial={ultima?.sobretasaIsn ? Number(ultima.sobretasaIsn) * 100 : ""}
                 ayuda="Adicionales estatales, si aplican"
               />
               <Campo
@@ -151,7 +165,7 @@ export default async function PaginaObligaciones({
                 tipo="number"
                 minimo={1}
                 maximo={28}
-                valorInicial={empresa.diaLimiteIsn ?? ""}
+                valorInicial={ultima?.diaLimiteIsn ?? ""}
                 ayuda="Día del mes siguiente (1 a 28)"
               />
             </div>
@@ -163,6 +177,26 @@ export default async function PaginaObligaciones({
             {isn.diaLimite} del mes siguiente. Solo el rol ADMIN puede modificarlo.
           </p>
         )}
+
+        {configuraciones.length > 0 ? (
+          <div className="mt-4">
+            <Tabla encabezados={["Vigente desde", "Entidad", "Tasa", "Sobretasa", "Día límite"]}>
+              {configuraciones.map((configuracion) => (
+                <tr key={configuracion.id}>
+                  <td className="px-3 py-2">{diaIso(configuracion.vigenteDesde)}</td>
+                  <td className="px-3 py-2">{configuracion.claveEntidadIsn}</td>
+                  <td className="px-3 py-2">
+                    {configuracion.tasaIsn ? pct(Number(configuracion.tasaIsn)) : "catálogo"}
+                  </td>
+                  <td className="px-3 py-2">
+                    {configuracion.sobretasaIsn ? pct(Number(configuracion.sobretasaIsn)) : "—"}
+                  </td>
+                  <td className="px-3 py-2">{configuracion.diaLimiteIsn ?? "catálogo"}</td>
+                </tr>
+              ))}
+            </Tabla>
+          </div>
+        ) : null}
       </Tarjeta>
 
       <Tarjeta

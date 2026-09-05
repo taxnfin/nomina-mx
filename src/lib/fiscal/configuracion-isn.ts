@@ -1,6 +1,9 @@
 import { ENTIDADES_ISN_2025, entidadIsn, type EntidadIsn } from "./isn";
 import { PARAMETROS_2025 } from "./tablas2025";
 
+/** Entidad que se asume mientras la empresa no captura su configuración. */
+export const ENTIDAD_ISN_PREDETERMINADA = "NLE";
+
 export interface ConfiguracionEmpresaIsn {
   claveEntidadIsn: string;
   tasaIsn?: string | number | null;
@@ -44,6 +47,27 @@ export function isnAplicable(empresa: ConfiguracionEmpresaIsn): IsnAplicable {
     tasaPropia: tasaPropia !== null,
     nota: catalogo?.nota,
   };
+}
+
+export interface ConfiguracionVigente {
+  vigenteDesde: Date;
+}
+
+/**
+ * Configuración aplicable a una fecha: la más reciente cuya vigencia ya inició.
+ * Los periodos ya declarados conservan así la tasa con la que se determinaron,
+ * aunque después se capture una nueva.
+ */
+export function configuracionVigenteEn<T extends ConfiguracionVigente>(
+  configuraciones: T[],
+  fecha: Date,
+): T | null {
+  return (
+    [...configuraciones]
+      .filter((configuracion) => configuracion.vigenteDesde.getTime() <= fecha.getTime())
+      .sort((a, b) => a.vigenteDesde.getTime() - b.vigenteDesde.getTime())
+      .at(-1) ?? null
+  );
 }
 
 export const OPCIONES_ENTIDAD_ISN = ENTIDADES_ISN_2025.map((entidad) => ({

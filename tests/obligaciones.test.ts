@@ -7,7 +7,7 @@ import {
 } from "../src/lib/obligaciones/calendario";
 import { construirCedulaSipare, resumenEnteros } from "../src/lib/obligaciones/sipare";
 import { ENTIDADES_ISN_2025, entidadIsn } from "../src/lib/fiscal/isn";
-import { isnAplicable } from "../src/lib/fiscal/configuracion-isn";
+import { configuracionVigenteEn, isnAplicable } from "../src/lib/fiscal/configuracion-isn";
 import { isnDeOtrasEntidades } from "../src/lib/obligaciones/servicio";
 import {
   calcularServicioEspecializado,
@@ -167,6 +167,21 @@ describe("configuración de ISN por empresa", () => {
     expect(otras.map((o) => o.clave)).toEqual(["CMX", "JAL"]);
     expect(otras[0].baseIsn.toNumber()).toBe(15000);
     expect(otras[0].isn.toNumber()).toBeCloseTo(15000 * (entidadIsn("CMX")?.tasa ?? 0), 2);
+  });
+
+  it("aplica a cada fecha la configuración que estaba vigente", () => {
+    const configuraciones = [
+      { vigenteDesde: new Date(Date.UTC(2025, 0, 1)), tasaIsn: 0.03 },
+      { vigenteDesde: new Date(Date.UTC(2025, 6, 1)), tasaIsn: 0.04 },
+    ];
+
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2024, 11, 31)))).toBeNull();
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2025, 5, 30)))?.tasaIsn).toBe(
+      0.03,
+    );
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2025, 11, 31)))?.tasaIsn).toBe(
+      0.04,
+    );
   });
 
   it("tolera una entidad fuera del catálogo apoyándose en lo capturado", () => {

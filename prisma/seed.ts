@@ -22,8 +22,14 @@ async function main() {
       codigoPostal: "01000",
       registroPatronal: "B5510768108",
       primaRiesgoTrabajo: 0.0054355,
-      claveEntidadIsn: "NLE",
     },
+  });
+
+  const vigenciaIsn = new Date(Date.UTC(2025, 0, 1));
+  await prisma.configuracionIsn.upsert({
+    where: { empresaId_vigenteDesde: { empresaId: empresa.id, vigenteDesde: vigenciaIsn } },
+    update: {},
+    create: { empresaId: empresa.id, vigenteDesde: vigenciaIsn, claveEntidadIsn: "NLE" },
   });
 
   const usuarios = [

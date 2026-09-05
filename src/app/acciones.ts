@@ -526,17 +526,28 @@ export async function accionGuardarConfiguracionIsn(
     return { error: "El día límite debe ser un número entero entre 1 y 28." };
   }
 
+  const desdeCapturado = texto(datos, "vigenteDesde");
+  if (desdeCapturado === "") return { error: "Indica desde qué fecha aplica la configuración." };
+  const vigenteDesde = fecha(desdeCapturado);
+  if (Number.isNaN(vigenteDesde.getTime())) {
+    return { error: "La fecha de inicio de vigencia no es válida." };
+  }
+
   try {
-    const anterior = await prisma.empresa.findUniqueOrThrow({ where: { id: sesion.empresaId } });
-    const empresa = await prisma.empresa.update({
-      where: { id: sesion.empresaId },
-      data: {
-        claveEntidadIsn: clave,
-        // La captura es en porcentaje; se guarda en tanto por uno.
-        tasaIsn: tasa === null ? null : (tasa / 100).toFixed(6),
-        sobretasaIsn: sobretasa === null ? null : (sobretasa / 100).toFixed(6),
-        diaLimiteIsn: diaLimite,
-      },
+    const datosIsn = {
+      claveEntidadIsn: clave,
+      // La captura es en porcentaje; se guarda en tanto por uno.
+      tasaIsn: tasa === null ? null : (tasa / 100).toFixed(6),
+      sobretasaIsn: sobretasa === null ? null : (sobretasa / 100).toFixed(6),
+      diaLimiteIsn: diaLimite,
+    };
+    const anterior = await prisma.configuracionIsn.findUnique({
+      where: { empresaId_vigenteDesde: { empresaId: sesion.empresaId, vigenteDesde } },
+    });
+    const configuracion = await prisma.configuracionIsn.upsert({
+      where: { empresaId_vigenteDesde: { empresaId: sesion.empresaId, vigenteDesde } },
+      create: { empresaId: sesion.empresaId, vigenteDesde, ...datosIsn },
+      update: datosIsn,
     });
 
     await registrarEvento({
@@ -545,22 +556,27 @@ export async function accionGuardarConfiguracionIsn(
       actorEmail: sesion.email,
       actorRol: sesion.rol,
       accion: "ISN_CONFIGURADO",
-      entidad: "Empresa",
-      entidadId: empresa.id,
-      datosAntes: {
-        claveEntidadIsn: anterior.claveEntidadIsn,
-        tasaIsn: anterior.tasaIsn?.toString() ?? null,
-      },
+      entidad: "ConfiguracionIsn",
+      entidadId: configuracion.id,
+      datosAntes: anterior
+        ? {
+            claveEntidadIsn: anterior.claveEntidadIsn,
+            tasaIsn: anterior.tasaIsn?.toString() ?? null,
+            sobretasaIsn: anterior.sobretasaIsn?.toString() ?? null,
+            diaLimiteIsn: anterior.diaLimiteIsn,
+          }
+        : undefined,
       datosDespues: {
-        claveEntidadIsn: empresa.claveEntidadIsn,
-        tasaIsn: empresa.tasaIsn?.toString() ?? null,
-        sobretasaIsn: empresa.sobretasaIsn?.toString() ?? null,
-        diaLimiteIsn: empresa.diaLimiteIsn,
+        vigenteDesde: configuracion.vigenteDesde.toISOString().slice(0, 10),
+        claveEntidadIsn: configuracion.claveEntidadIsn,
+        tasaIsn: configuracion.tasaIsn?.toString() ?? null,
+        sobretasaIsn: configuracion.sobretasaIsn?.toString() ?? null,
+        diaLimiteIsn: configuracion.diaLimiteIsn,
       },
     });
 
     revalidatePath("/obligaciones");
-    return { mensaje: "Configuración de ISN guardada." };
+    return { mensaje: "Configuración de ISN guardada con su vigencia." };
   } catch (error) {
     return { error: mensajeError(error) };
   }

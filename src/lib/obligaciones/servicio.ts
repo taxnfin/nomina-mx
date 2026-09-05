@@ -1,6 +1,11 @@
 import { prisma } from "../db";
 import { d, pesos, type Decimal } from "../dinero";
-import { isnAplicable, type IsnAplicable } from "../fiscal/configuracion-isn";
+import {
+  configuracionVigenteEn,
+  isnAplicable,
+  ENTIDAD_ISN_PREDETERMINADA,
+  type IsnAplicable,
+} from "../fiscal/configuracion-isn";
 import { entidadIsn } from "../fiscal/isn";
 import { PARAMETROS_2025 } from "../fiscal/tablas2025";
 import {
@@ -28,6 +33,8 @@ export interface ObligacionesDelMes {
   isn: IsnAplicable;
   baseIsn: Decimal;
   totalIsn: Decimal;
+  /** Inicio de vigencia de la configuración de ISN aplicada al mes. */
+  isnVigenteDesde: Date | null;
   /**
    * Erogaciones de empleados registrados en otra entidad: se declaran ante ese
    * estado, por lo que quedan fuera de la base de la empresa.
@@ -94,12 +101,19 @@ export async function obligacionesDelMes(
 ): Promise<ObligacionesDelMes> {
   const { desde, hasta } = rangoDelMes(ejercicio, mes);
 
-  const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+  // El ISN del mes se determina con la configuración vigente al último día del
+  // periodo, de modo que capturar una tasa nueva no reescribe meses anteriores.
+  const configuraciones = await prisma.configuracionIsn.findMany({
+    where: { empresaId },
+    orderBy: { vigenteDesde: "asc" },
+  });
+  const ultimoDia = new Date(hasta.getTime() - 1);
+  const vigente = configuracionVigenteEn(configuraciones, ultimoDia);
   const isn = isnAplicable({
-    claveEntidadIsn: empresa.claveEntidadIsn,
-    tasaIsn: empresa.tasaIsn?.toString() ?? null,
-    sobretasaIsn: empresa.sobretasaIsn?.toString() ?? null,
-    diaLimiteIsn: empresa.diaLimiteIsn,
+    claveEntidadIsn: vigente?.claveEntidadIsn ?? ENTIDAD_ISN_PREDETERMINADA,
+    tasaIsn: vigente?.tasaIsn?.toString() ?? null,
+    sobretasaIsn: vigente?.sobretasaIsn?.toString() ?? null,
+    diaLimiteIsn: vigente?.diaLimiteIsn ?? null,
   });
 
   const corridas = await prisma.corridaNomina.findMany({
@@ -177,6 +191,7 @@ export async function obligacionesDelMes(
     cedula: construirCedulaSipare(recibosSipare),
     isr: resumen,
     isn,
+    isnVigenteDesde: vigente?.vigenteDesde ?? null,
     baseIsn: resumen.baseIsn,
     totalIsn: resumen.isn,
     otrasEntidades: isnDeOtrasEntidades(ajenos),
