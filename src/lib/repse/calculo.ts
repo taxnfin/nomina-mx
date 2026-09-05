@@ -10,6 +10,7 @@
  */
 
 import { Decimal, d, pesos } from "../dinero";
+import { siguienteDiaHabil } from "../obligaciones/calendario";
 
 export const FUNDAMENTO_REPSE = [
   "LFT Art. 12, 13, 14 y 15 — servicios especializados y registro ante la STPS",
@@ -131,21 +132,21 @@ export function cuatrimestresRepse(ejercicio: number): Cuatrimestre[] {
       etiqueta: `Tercer cuatrimestre ${ejercicio - 1} (septiembre-diciembre)`,
       inicio: new Date(Date.UTC(ejercicio - 1, 8, 1)),
       fin: new Date(Date.UTC(ejercicio - 1, 11, 31)),
-      fechaLimite: new Date(Date.UTC(ejercicio, 0, 17)),
+      fechaLimite: siguienteDiaHabil(new Date(Date.UTC(ejercicio, 0, 17))),
     },
     {
       numero: 1,
       etiqueta: `Primer cuatrimestre ${ejercicio} (enero-abril)`,
       inicio: new Date(Date.UTC(ejercicio, 0, 1)),
       fin: new Date(Date.UTC(ejercicio, 3, 30)),
-      fechaLimite: new Date(Date.UTC(ejercicio, 4, 17)),
+      fechaLimite: siguienteDiaHabil(new Date(Date.UTC(ejercicio, 4, 17))),
     },
     {
       numero: 2,
       etiqueta: `Segundo cuatrimestre ${ejercicio} (mayo-agosto)`,
       inicio: new Date(Date.UTC(ejercicio, 4, 1)),
       fin: new Date(Date.UTC(ejercicio, 7, 31)),
-      fechaLimite: new Date(Date.UTC(ejercicio, 8, 17)),
+      fechaLimite: siguienteDiaHabil(new Date(Date.UTC(ejercicio, 8, 17))),
     },
   ];
 }

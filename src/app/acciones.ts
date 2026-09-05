@@ -22,6 +22,7 @@ import {
 import { timbrarCorrida } from "@/lib/cfdi/servicio";
 import { calcularFiniquito } from "@/lib/nomina/finiquito";
 import { salarioBaseCotizacion } from "@/lib/fiscal/imss";
+import { entidadIsn } from "@/lib/fiscal/isn";
 import { generarPeriodos, type Periodicidad } from "@/lib/fiscal/periodicidad";
 import { diasVacacionesPorAntiguedad, PARAMETROS_2025 } from "@/lib/fiscal/tablas2025";
 import { generarIncidenciasDelPeriodo, registrarChecada } from "@/lib/checador/servicio";
@@ -486,6 +487,96 @@ export async function accionCalcularFiniquito(
 
     revalidatePath("/finiquitos");
     return { mensaje: `Finiquito calculado: neto ${resultado.neto.toFixed(2)}.` };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
+export async function accionGuardarConfiguracionIsn(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN");
+  if (!sesion) return { error: sinPermiso };
+
+  const clave = texto(datos, "claveEntidadIsn");
+  if (!entidadIsn(clave)) return { error: "Selecciona una entidad federativa válida." };
+
+  const porcentaje = (nombre: string): number | null | "invalido" => {
+    const capturado = texto(datos, nombre);
+    if (capturado === "") return null;
+    const valor = Number(capturado);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) return "invalido";
+    return valor;
+  };
+
+  const tasa = porcentaje("tasaIsn");
+  if (tasa === "invalido") {
+    return { error: "La tasa debe expresarse en porcentaje entre 0 y 100." };
+  }
+  const sobretasa = porcentaje("sobretasaIsn");
+  if (sobretasa === "invalido") {
+    return { error: "La sobretasa debe expresarse en porcentaje entre 0 y 100." };
+  }
+
+  const diaCapturado = texto(datos, "diaLimiteIsn");
+  const diaLimite = diaCapturado === "" ? null : Number(diaCapturado);
+  // Se limita a 28 para que el vencimiento exista en cualquier mes, incluido febrero.
+  if (diaLimite !== null && (!Number.isInteger(diaLimite) || diaLimite < 1 || diaLimite > 28)) {
+    return { error: "El día límite debe ser un número entero entre 1 y 28." };
+  }
+
+  const desdeCapturado = texto(datos, "vigenteDesde");
+  if (desdeCapturado === "") return { error: "Indica desde qué fecha aplica la configuración." };
+  const vigenteDesde = fecha(desdeCapturado);
+  if (Number.isNaN(vigenteDesde.getTime())) {
+    return { error: "La fecha de inicio de vigencia no es válida." };
+  }
+
+  try {
+    const datosIsn = {
+      claveEntidadIsn: clave,
+      // La captura es en porcentaje; se guarda en tanto por uno.
+      tasaIsn: tasa === null ? null : (tasa / 100).toFixed(6),
+      sobretasaIsn: sobretasa === null ? null : (sobretasa / 100).toFixed(6),
+      diaLimiteIsn: diaLimite,
+    };
+    const anterior = await prisma.configuracionIsn.findUnique({
+      where: { empresaId_vigenteDesde: { empresaId: sesion.empresaId, vigenteDesde } },
+    });
+    const configuracion = await prisma.configuracionIsn.upsert({
+      where: { empresaId_vigenteDesde: { empresaId: sesion.empresaId, vigenteDesde } },
+      create: { empresaId: sesion.empresaId, vigenteDesde, ...datosIsn },
+      update: datosIsn,
+    });
+
+    await registrarEvento({
+      empresaId: sesion.empresaId,
+      actorId: sesion.usuarioId,
+      actorEmail: sesion.email,
+      actorRol: sesion.rol,
+      accion: "ISN_CONFIGURADO",
+      entidad: "ConfiguracionIsn",
+      entidadId: configuracion.id,
+      datosAntes: anterior
+        ? {
+            claveEntidadIsn: anterior.claveEntidadIsn,
+            tasaIsn: anterior.tasaIsn?.toString() ?? null,
+            sobretasaIsn: anterior.sobretasaIsn?.toString() ?? null,
+            diaLimiteIsn: anterior.diaLimiteIsn,
+          }
+        : undefined,
+      datosDespues: {
+        vigenteDesde: configuracion.vigenteDesde.toISOString().slice(0, 10),
+        claveEntidadIsn: configuracion.claveEntidadIsn,
+        tasaIsn: configuracion.tasaIsn?.toString() ?? null,
+        sobretasaIsn: configuracion.sobretasaIsn?.toString() ?? null,
+        diaLimiteIsn: configuracion.diaLimiteIsn,
+      },
+    });
+
+    revalidatePath("/obligaciones");
+    return { mensaje: "Configuración de ISN guardada con su vigencia." };
   } catch (error) {
     return { error: mensajeError(error) };
   }

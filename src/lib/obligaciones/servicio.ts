@@ -1,5 +1,11 @@
 import { prisma } from "../db";
 import { d, pesos, type Decimal } from "../dinero";
+import {
+  configuracionVigenteEn,
+  isnAplicable,
+  ENTIDAD_ISN_PREDETERMINADA,
+  type IsnAplicable,
+} from "../fiscal/configuracion-isn";
 import { entidadIsn } from "../fiscal/isn";
 import { PARAMETROS_2025 } from "../fiscal/tablas2025";
 import {
@@ -18,20 +24,62 @@ interface MemoriaImss {
   } | null;
 }
 
-export interface EnteroPorEntidad extends ResumenEntero {
-  clave: string;
-  nombre: string;
-  tasa: number;
-}
-
 export interface ObligacionesDelMes {
   ejercicio: number;
   mes: number;
   corridas: { id: string; descripcion: string; estado: string; fechaPago: Date }[];
   cedula: CedulaSipare;
   isr: ResumenEntero;
-  entidades: EnteroPorEntidad[];
+  isn: IsnAplicable;
+  baseIsn: Decimal;
   totalIsn: Decimal;
+  /** Inicio de vigencia de la configuración de ISN aplicada al mes. */
+  isnVigenteDesde: Date | null;
+  /**
+   * Erogaciones de empleados registrados en otra entidad: se declaran ante ese
+   * estado, por lo que quedan fuera de la base de la empresa.
+   */
+  otrasEntidades: IsnPorEntidad[];
+}
+
+export interface IsnPorEntidad {
+  clave: string;
+  nombre: string;
+  tasa: number;
+  sobretasa: number;
+  baseIsn: Decimal;
+  isn: Decimal;
+}
+
+/**
+ * El ISN lo causa cada entidad por separado, así que las erogaciones de los
+ * empleados registrados fuera del estado de la empresa se determinan con la
+ * tasa del catálogo de su propia entidad.
+ */
+export function isnDeOtrasEntidades(
+  recibos: { clave: string; baseIsn: Decimal.Value }[],
+): IsnPorEntidad[] {
+  const porEntidad = new Map<string, Decimal>();
+  for (const recibo of recibos) {
+    porEntidad.set(recibo.clave, (porEntidad.get(recibo.clave) ?? d(0)).plus(recibo.baseIsn));
+  }
+
+  return [...porEntidad.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([clave, base]) => {
+      const catalogo = entidadIsn(clave);
+      const tasa = catalogo?.tasa ?? PARAMETROS_2025.IMPUESTO_SOBRE_NOMINAS;
+      const sobretasa = catalogo?.sobretasa ?? 0;
+      const causado = base.times(tasa);
+      return {
+        clave,
+        nombre: catalogo?.nombre ?? clave,
+        tasa,
+        sobretasa,
+        baseIsn: pesos(base),
+        isn: pesos(causado.plus(causado.times(sobretasa))),
+      };
+    });
 }
 
 function rangoDelMes(ejercicio: number, mes: number): { desde: Date; hasta: Date } {
@@ -52,6 +100,21 @@ export async function obligacionesDelMes(
   mes: number,
 ): Promise<ObligacionesDelMes> {
   const { desde, hasta } = rangoDelMes(ejercicio, mes);
+
+  // El ISN del mes se determina con la configuración vigente al último día del
+  // periodo, de modo que capturar una tasa nueva no reescribe meses anteriores.
+  const configuraciones = await prisma.configuracionIsn.findMany({
+    where: { empresaId },
+    orderBy: { vigenteDesde: "asc" },
+  });
+  const ultimoDia = new Date(hasta.getTime() - 1);
+  const vigente = configuracionVigenteEn(configuraciones, ultimoDia);
+  const isn = isnAplicable({
+    claveEntidadIsn: vigente?.claveEntidadIsn ?? ENTIDAD_ISN_PREDETERMINADA,
+    tasaIsn: vigente?.tasaIsn?.toString() ?? null,
+    sobretasaIsn: vigente?.sobretasaIsn?.toString() ?? null,
+    diaLimiteIsn: vigente?.diaLimiteIsn ?? null,
+  });
 
   const corridas = await prisma.corridaNomina.findMany({
     where: {
@@ -92,36 +155,27 @@ export async function obligacionesDelMes(
     }),
   );
 
-  const porEntidad = new Map<
-    string,
-    { isrRetenido: string; subsidioEntregado: string; baseIsn: string }[]
-  >();
-  for (const corrida of corridas) {
-    for (const recibo of corrida.recibos) {
-      const clave = recibo.empleado.claveEntidadFederativa;
-      const lista = porEntidad.get(clave) ?? [];
-      lista.push({
+  const ajenos: { clave: string; baseIsn: string }[] = [];
+  const importes = corridas.flatMap((corrida) =>
+    corrida.recibos.map((recibo) => {
+      const propia = recibo.empleado.claveEntidadFederativa === isn.clave;
+      if (!propia) {
+        ajenos.push({
+          clave: recibo.empleado.claveEntidadFederativa,
+          baseIsn: recibo.totalPercepciones.toString(),
+        });
+      }
+      return {
+        // El ISR es federal: se entera por la totalidad de los recibos.
         isrRetenido: recibo.isrRetenido.toString(),
         subsidioEntregado: recibo.subsidioEntregado.toString(),
         // El ISN grava las erogaciones por el trabajo personal subordinado.
-        baseIsn: recibo.totalPercepciones.toString(),
-      });
-      porEntidad.set(clave, lista);
-    }
-  }
+        baseIsn: propia ? recibo.totalPercepciones.toString() : "0",
+      };
+    }),
+  );
 
-  const entidades: EnteroPorEntidad[] = [...porEntidad.entries()].map(([clave, recibos]) => {
-    const entidad = entidadIsn(clave);
-    const tasa = entidad?.tasa ?? PARAMETROS_2025.IMPUESTO_SOBRE_NOMINAS;
-    return {
-      clave,
-      nombre: entidad?.nombre ?? clave,
-      tasa,
-      ...resumenEnteros(recibos, tasa, entidad?.sobretasa ?? 0),
-    };
-  });
-
-  const todos = [...porEntidad.values()].flat();
+  const resumen = resumenEnteros(importes, isn.tasa, isn.sobretasa);
 
   return {
     ejercicio,
@@ -135,20 +189,11 @@ export async function obligacionesDelMes(
       fechaPago: corrida.periodo.fechaPago,
     })),
     cedula: construirCedulaSipare(recibosSipare),
-    isr: resumenEnteros(todos, 0),
-    entidades,
-    totalIsn: pesos(entidades.reduce((acc, entidad) => acc.plus(entidad.isn), d(0))),
+    isr: resumen,
+    isn,
+    isnVigenteDesde: vigente?.vigenteDesde ?? null,
+    baseIsn: resumen.baseIsn,
+    totalIsn: resumen.isn,
+    otrasEntidades: isnDeOtrasEntidades(ajenos),
   };
-}
-
-/** Entidad donde cotiza la mayoría de la plantilla; define el ISN del calendario. */
-export async function entidadPrincipal(empresaId: string): Promise<string | null> {
-  const agrupado = await prisma.empleado.groupBy({
-    by: ["claveEntidadFederativa"],
-    where: { empresaId, estado: "ACTIVO" },
-    _count: { _all: true },
-    orderBy: { _count: { claveEntidadFederativa: "desc" } },
-    take: 1,
-  });
-  return agrupado[0]?.claveEntidadFederativa ?? null;
 }

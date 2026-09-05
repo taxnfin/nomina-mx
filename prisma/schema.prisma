@@ -124,13 +124,35 @@ model Empresa {
   creadoEn           DateTime @default(now())
   actualizadoEn      DateTime @updatedAt
 
-  usuarios   Usuario[]
-  empleados  Empleado[]
-  corridas   CorridaNomina[]
-  bitacora   RegistroBitacora[]
-  parametros ParametroFiscal[]
-  repse      RegistroRepse?
-  contratos  ContratoRepse[]
+  usuarios         Usuario[]
+  empleados        Empleado[]
+  corridas         CorridaNomina[]
+  bitacora         RegistroBitacora[]
+  parametros       ParametroFiscal[]
+  repse            RegistroRepse?
+  contratos        ContratoRepse[]
+  configuracionIsn ConfiguracionIsn[]
+}
+
+/// Configuración de impuesto sobre nóminas con vigencia, para que los periodos
+/// ya declarados conserven la tasa que les fue aplicable.
+model ConfiguracionIsn {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Primer día a partir del cual aplica esta configuración.
+  vigenteDesde    DateTime @db.Date
+  /// Entidad donde se causa el impuesto (catálogo c_Estado del SAT).
+  claveEntidadIsn String
+  /// Tasa de la empresa; si es nula se usa la del catálogo estatal.
+  tasaIsn         Decimal? @db.Decimal(9, 6)
+  sobretasaIsn    Decimal? @db.Decimal(9, 6)
+  /// Día del mes siguiente en que vence el pago; si es nulo se usa el del catálogo.
+  diaLimiteIsn    Int?
+  creadoEn        DateTime @default(now())
+
+  @@unique([empresaId, vigenteDesde])
+  @@index([empresaId, vigenteDesde])
 }
 
 /// Registro de prestadora de servicios especializados ante la STPS (LFT Art. 15).
@@ -201,7 +223,7 @@ model Empleado {
   puesto                 String
   departamento           String?
   registroPatronal       String?
-  claveEntidadFederativa String  @default("MEX")
+  claveEntidadFederativa String  @default("NLE")
   banco                  String?
   cuentaClabe            String?
 

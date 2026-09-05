@@ -25,6 +25,13 @@ async function main() {
     },
   });
 
+  const vigenciaIsn = new Date(Date.UTC(2025, 0, 1));
+  await prisma.configuracionIsn.upsert({
+    where: { empresaId_vigenteDesde: { empresaId: empresa.id, vigenteDesde: vigenciaIsn } },
+    update: {},
+    create: { empresaId: empresa.id, vigenteDesde: vigenciaIsn, claveEntidadIsn: "NLE" },
+  });
+
   const usuarios = [
     { nombre: "Ana Administradora", email: "admin@demo.mx", rol: "ADMIN" as const },
     { nombre: "Noé Nominista", email: "nomina@demo.mx", rol: "NOMINISTA" as const },

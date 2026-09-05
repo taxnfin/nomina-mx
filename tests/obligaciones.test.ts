@@ -7,6 +7,8 @@ import {
 } from "../src/lib/obligaciones/calendario";
 import { construirCedulaSipare, resumenEnteros } from "../src/lib/obligaciones/sipare";
 import { ENTIDADES_ISN_2025, entidadIsn } from "../src/lib/fiscal/isn";
+import { configuracionVigenteEn, isnAplicable } from "../src/lib/fiscal/configuracion-isn";
+import { isnDeOtrasEntidades } from "../src/lib/obligaciones/servicio";
 import {
   calcularServicioEspecializado,
   cuatrimestresRepse,
@@ -134,6 +136,61 @@ describe("catálogo de ISN", () => {
   });
 });
 
+describe("configuración de ISN por empresa", () => {
+  it("usa la tasa del catálogo cuando la empresa no captura una propia", () => {
+    const isn = isnAplicable({ claveEntidadIsn: "NLE" });
+    expect(isn.nombre).toBe("Nuevo León");
+    expect(isn.tasa).toBe(0.03);
+    expect(isn.tasaPropia).toBe(false);
+    expect(isn.diaLimite).toBe(entidadIsn("NLE")?.diaLimite);
+  });
+
+  it("respeta la tasa, sobretasa y día límite capturados por la empresa", () => {
+    const isn = isnAplicable({
+      claveEntidadIsn: "NLE",
+      tasaIsn: "0.035000",
+      sobretasaIsn: "0.100000",
+      diaLimiteIsn: 20,
+    });
+    expect(isn.tasa).toBe(0.035);
+    expect(isn.sobretasa).toBe(0.1);
+    expect(isn.diaLimite).toBe(20);
+    expect(isn.tasaPropia).toBe(true);
+  });
+
+  it("determina por separado las erogaciones de empleados de otras entidades", () => {
+    const otras = isnDeOtrasEntidades([
+      { clave: "CMX", baseIsn: 10000 },
+      { clave: "CMX", baseIsn: 5000 },
+      { clave: "JAL", baseIsn: 20000 },
+    ]);
+    expect(otras.map((o) => o.clave)).toEqual(["CMX", "JAL"]);
+    expect(otras[0].baseIsn.toNumber()).toBe(15000);
+    expect(otras[0].isn.toNumber()).toBeCloseTo(15000 * (entidadIsn("CMX")?.tasa ?? 0), 2);
+  });
+
+  it("aplica a cada fecha la configuración que estaba vigente", () => {
+    const configuraciones = [
+      { vigenteDesde: new Date(Date.UTC(2025, 0, 1)), tasaIsn: 0.03 },
+      { vigenteDesde: new Date(Date.UTC(2025, 6, 1)), tasaIsn: 0.04 },
+    ];
+
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2024, 11, 31)))).toBeNull();
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2025, 5, 30)))?.tasaIsn).toBe(
+      0.03,
+    );
+    expect(configuracionVigenteEn(configuraciones, new Date(Date.UTC(2025, 11, 31)))?.tasaIsn).toBe(
+      0.04,
+    );
+  });
+
+  it("tolera una entidad fuera del catálogo apoyándose en lo capturado", () => {
+    const isn = isnAplicable({ claveEntidadIsn: "XXX", tasaIsn: 0.025, diaLimiteIsn: 15 });
+    expect(isn.tasa).toBe(0.025);
+    expect(isn.diaLimite).toBe(15);
+  });
+});
+
 describe("servicios especializados", () => {
   it("costea el servicio con margen, IVA y retención", () => {
     const costo = calcularServicioEspecializado({
@@ -160,12 +217,19 @@ describe("servicios especializados", () => {
     expect(estadoRegistro(registro, new Date("2026-06-01T00:00:00Z")).vigente).toBe(false);
   });
 
-  it("informa los tres cuatrimestres con corte al 17", () => {
+  it("informa los tres cuatrimestres con corte al 17 recorrido a día hábil", () => {
     const cuatrimestres = cuatrimestresRepse(2025);
+    // El 17 de mayo de 2025 es sábado.
     expect(cuatrimestres.map((c) => iso(c.fechaLimite))).toEqual([
       "2025-01-17",
-      "2025-05-17",
+      "2025-05-19",
       "2025-09-17",
     ]);
+  });
+
+  it("coincide con las fechas del calendario anual de ICSOE y SISUB", () => {
+    const calendario = calendarioDeObligaciones(2025, { tieneRepse: true });
+    const icsoe = calendario.filter((o) => o.clave === "ICSOE").map((o) => iso(o.fechaLimite));
+    expect(cuatrimestresRepse(2025).map((c) => iso(c.fechaLimite))).toEqual(icsoe);
   });
 });
