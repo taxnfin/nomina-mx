@@ -491,6 +491,96 @@ export async function accionCalcularFiniquito(
   }
 }
 
+export async function accionGuardarRegistroRepse(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN");
+  if (!sesion) return { error: sinPermiso };
+
+  const numeroRegistro = texto(datos, "numeroRegistro");
+  const actividades = texto(datos, "actividades");
+  if (!numeroRegistro || !actividades) {
+    return { error: "Captura el número de registro y al menos una actividad." };
+  }
+
+  try {
+    const valores = {
+      numeroRegistro,
+      fechaRegistro: fecha(texto(datos, "fechaRegistro")),
+      actividades,
+      notas: opcional(datos, "notas"),
+    };
+    const registro = await prisma.registroRepse.upsert({
+      where: { empresaId: sesion.empresaId },
+      create: { empresaId: sesion.empresaId, ...valores },
+      update: valores,
+    });
+
+    await registrarEvento({
+      empresaId: sesion.empresaId,
+      actorId: sesion.usuarioId,
+      actorEmail: sesion.email,
+      actorRol: sesion.rol,
+      accion: "REPSE_REGISTRO_ACTUALIZADO",
+      entidad: "RegistroRepse",
+      entidadId: registro.id,
+      datosDespues: { numeroRegistro, fechaRegistro: valores.fechaRegistro.toISOString() },
+    });
+
+    revalidatePath("/repse");
+    return { mensaje: "Registro REPSE guardado." };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
+export async function accionRegistrarContratoRepse(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
+
+  const fechaFinTexto = opcional(datos, "fechaFin");
+
+  try {
+    const contrato = await prisma.contratoRepse.create({
+      data: {
+        empresaId: sesion.empresaId,
+        beneficiario: texto(datos, "beneficiario"),
+        rfcBeneficiario: texto(datos, "rfcBeneficiario").toUpperCase(),
+        objeto: texto(datos, "objeto"),
+        fechaInicio: fecha(texto(datos, "fechaInicio")),
+        fechaFin: fechaFinTexto ? fecha(fechaFinTexto) : null,
+        numeroTrabajadores: numero(datos, "numeroTrabajadores"),
+        margenUtilidad: numero(datos, "margenUtilidad", 0.15).toFixed(6),
+        otrosCostos: numero(datos, "otrosCostos").toFixed(2),
+      },
+    });
+
+    await registrarEvento({
+      empresaId: sesion.empresaId,
+      actorId: sesion.usuarioId,
+      actorEmail: sesion.email,
+      actorRol: sesion.rol,
+      accion: "REPSE_CONTRATO_REGISTRADO",
+      entidad: "ContratoRepse",
+      entidadId: contrato.id,
+      datosDespues: {
+        beneficiario: contrato.beneficiario,
+        rfcBeneficiario: contrato.rfcBeneficiario,
+        numeroTrabajadores: contrato.numeroTrabajadores,
+      },
+    });
+
+    revalidatePath("/repse");
+    return { mensaje: `Contrato con ${contrato.beneficiario} registrado.` };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
 function mensajeError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Ocurrió un error inesperado.";
