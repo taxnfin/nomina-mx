@@ -502,11 +502,28 @@ export async function accionGuardarConfiguracionIsn(
   const clave = texto(datos, "claveEntidadIsn");
   if (!entidadIsn(clave)) return { error: "Selecciona una entidad federativa válida." };
 
-  const tasa = texto(datos, "tasaIsn");
-  const sobretasa = texto(datos, "sobretasaIsn");
-  const diaLimite = texto(datos, "diaLimiteIsn");
-  if (tasa !== "" && (numero(datos, "tasaIsn") < 0 || numero(datos, "tasaIsn") > 100)) {
+  const porcentaje = (nombre: string): number | null | "invalido" => {
+    const capturado = texto(datos, nombre);
+    if (capturado === "") return null;
+    const valor = Number(capturado);
+    if (!Number.isFinite(valor) || valor < 0 || valor > 100) return "invalido";
+    return valor;
+  };
+
+  const tasa = porcentaje("tasaIsn");
+  if (tasa === "invalido") {
     return { error: "La tasa debe expresarse en porcentaje entre 0 y 100." };
+  }
+  const sobretasa = porcentaje("sobretasaIsn");
+  if (sobretasa === "invalido") {
+    return { error: "La sobretasa debe expresarse en porcentaje entre 0 y 100." };
+  }
+
+  const diaCapturado = texto(datos, "diaLimiteIsn");
+  const diaLimite = diaCapturado === "" ? null : Number(diaCapturado);
+  // Se limita a 28 para que el vencimiento exista en cualquier mes, incluido febrero.
+  if (diaLimite !== null && (!Number.isInteger(diaLimite) || diaLimite < 1 || diaLimite > 28)) {
+    return { error: "El día límite debe ser un número entero entre 1 y 28." };
   }
 
   try {
@@ -516,9 +533,9 @@ export async function accionGuardarConfiguracionIsn(
       data: {
         claveEntidadIsn: clave,
         // La captura es en porcentaje; se guarda en tanto por uno.
-        tasaIsn: tasa === "" ? null : (numero(datos, "tasaIsn") / 100).toFixed(6),
-        sobretasaIsn: sobretasa === "" ? null : (numero(datos, "sobretasaIsn") / 100).toFixed(6),
-        diaLimiteIsn: diaLimite === "" ? null : numero(datos, "diaLimiteIsn"),
+        tasaIsn: tasa === null ? null : (tasa / 100).toFixed(6),
+        sobretasaIsn: sobretasa === null ? null : (sobretasa / 100).toFixed(6),
+        diaLimiteIsn: diaLimite,
       },
     });
 

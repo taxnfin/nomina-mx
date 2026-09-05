@@ -58,6 +58,8 @@ export function Campo({
   requerido,
   valorInicial,
   paso,
+  minimo,
+  maximo,
   ayuda,
 }: {
   etiqueta: string;
@@ -66,6 +68,8 @@ export function Campo({
   requerido?: boolean;
   valorInicial?: string | number;
   paso?: string;
+  minimo?: number;
+  maximo?: number;
   ayuda?: string;
 }) {
   return (
@@ -76,6 +80,8 @@ export function Campo({
         name={nombre}
         type={tipo}
         step={paso}
+        min={minimo}
+        max={maximo}
         required={requerido}
         defaultValue={valorInicial}
       />

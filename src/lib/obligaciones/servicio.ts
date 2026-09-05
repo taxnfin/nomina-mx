@@ -1,6 +1,8 @@
 import { prisma } from "../db";
-import { d, type Decimal } from "../dinero";
+import { d, pesos, type Decimal } from "../dinero";
 import { isnAplicable, type IsnAplicable } from "../fiscal/configuracion-isn";
+import { entidadIsn } from "../fiscal/isn";
+import { PARAMETROS_2025 } from "../fiscal/tablas2025";
 import {
   construirCedulaSipare,
   resumenEnteros,
@@ -26,8 +28,51 @@ export interface ObligacionesDelMes {
   isn: IsnAplicable;
   baseIsn: Decimal;
   totalIsn: Decimal;
-  /** Entidades de los empleados distintas a la configurada para el ISN. */
-  entidadesAjenas: string[];
+  /**
+   * Erogaciones de empleados registrados en otra entidad: se declaran ante ese
+   * estado, por lo que quedan fuera de la base de la empresa.
+   */
+  otrasEntidades: IsnPorEntidad[];
+}
+
+export interface IsnPorEntidad {
+  clave: string;
+  nombre: string;
+  tasa: number;
+  sobretasa: number;
+  baseIsn: Decimal;
+  isn: Decimal;
+}
+
+/**
+ * El ISN lo causa cada entidad por separado, así que las erogaciones de los
+ * empleados registrados fuera del estado de la empresa se determinan con la
+ * tasa del catálogo de su propia entidad.
+ */
+export function isnDeOtrasEntidades(
+  recibos: { clave: string; baseIsn: Decimal.Value }[],
+): IsnPorEntidad[] {
+  const porEntidad = new Map<string, Decimal>();
+  for (const recibo of recibos) {
+    porEntidad.set(recibo.clave, (porEntidad.get(recibo.clave) ?? d(0)).plus(recibo.baseIsn));
+  }
+
+  return [...porEntidad.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([clave, base]) => {
+      const catalogo = entidadIsn(clave);
+      const tasa = catalogo?.tasa ?? PARAMETROS_2025.IMPUESTO_SOBRE_NOMINAS;
+      const sobretasa = catalogo?.sobretasa ?? 0;
+      const causado = base.times(tasa);
+      return {
+        clave,
+        nombre: catalogo?.nombre ?? clave,
+        tasa,
+        sobretasa,
+        baseIsn: pesos(base),
+        isn: pesos(causado.plus(causado.times(sobretasa))),
+      };
+    });
 }
 
 function rangoDelMes(ejercicio: number, mes: number): { desde: Date; hasta: Date } {
@@ -96,17 +141,22 @@ export async function obligacionesDelMes(
     }),
   );
 
-  const entidadesAjenas = new Set<string>();
+  const ajenos: { clave: string; baseIsn: string }[] = [];
   const importes = corridas.flatMap((corrida) =>
     corrida.recibos.map((recibo) => {
-      if (recibo.empleado.claveEntidadFederativa !== isn.clave) {
-        entidadesAjenas.add(recibo.empleado.claveEntidadFederativa);
+      const propia = recibo.empleado.claveEntidadFederativa === isn.clave;
+      if (!propia) {
+        ajenos.push({
+          clave: recibo.empleado.claveEntidadFederativa,
+          baseIsn: recibo.totalPercepciones.toString(),
+        });
       }
       return {
+        // El ISR es federal: se entera por la totalidad de los recibos.
         isrRetenido: recibo.isrRetenido.toString(),
         subsidioEntregado: recibo.subsidioEntregado.toString(),
         // El ISN grava las erogaciones por el trabajo personal subordinado.
-        baseIsn: recibo.totalPercepciones.toString(),
+        baseIsn: propia ? recibo.totalPercepciones.toString() : "0",
       };
     }),
   );
@@ -129,6 +179,6 @@ export async function obligacionesDelMes(
     isn,
     baseIsn: resumen.baseIsn,
     totalIsn: resumen.isn,
-    entidadesAjenas: [...entidadesAjenas],
+    otrasEntidades: isnDeOtrasEntidades(ajenos),
   };
 }

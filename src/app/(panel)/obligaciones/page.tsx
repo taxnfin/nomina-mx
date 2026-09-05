@@ -130,6 +130,8 @@ export default async function PaginaObligaciones({
                 nombre="tasaIsn"
                 tipo="number"
                 paso="0.0001"
+                minimo={0}
+                maximo={100}
                 valorInicial={empresa.tasaIsn ? Number(empresa.tasaIsn) * 100 : ""}
                 ayuda="Vacío = tasa del catálogo estatal"
               />
@@ -138,6 +140,8 @@ export default async function PaginaObligaciones({
                 nombre="sobretasaIsn"
                 tipo="number"
                 paso="0.0001"
+                minimo={0}
+                maximo={100}
                 valorInicial={empresa.sobretasaIsn ? Number(empresa.sobretasaIsn) * 100 : ""}
                 ayuda="Adicionales estatales, si aplican"
               />
@@ -145,8 +149,10 @@ export default async function PaginaObligaciones({
                 etiqueta="Día límite"
                 nombre="diaLimiteIsn"
                 tipo="number"
+                minimo={1}
+                maximo={28}
                 valorInicial={empresa.diaLimiteIsn ?? ""}
-                ayuda="Día del mes siguiente"
+                ayuda="Día del mes siguiente (1 a 28)"
               />
             </div>
           </Formulario>
@@ -213,11 +219,25 @@ export default async function PaginaObligaciones({
             <td className="px-3 py-2 font-medium">{formatoMxn(datos.totalIsn)}</td>
             <td className="px-3 py-2">día {isn.diaLimite} del mes siguiente</td>
           </tr>
+          {datos.otrasEntidades.map((otra) => (
+            <tr key={otra.clave}>
+              <td className="px-3 py-2">{otra.nombre}</td>
+              <td className="px-3 py-2">
+                {pct(otra.tasa)}
+                {otra.sobretasa ? ` + ${pct(otra.sobretasa)} sobretasa` : ""}
+              </td>
+              <td className="px-3 py-2">{formatoMxn(otra.baseIsn)}</td>
+              <td className="px-3 py-2 font-medium">{formatoMxn(otra.isn)}</td>
+              <td className="px-3 py-2">según la ley de esa entidad</td>
+            </tr>
+          ))}
         </Tabla>
-        {datos.entidadesAjenas.length > 0 ? (
+        {datos.otrasEntidades.length > 0 ? (
           <p className="mt-3 text-xs text-amber-700">
-            Hay empleados registrados en {datos.entidadesAjenas.join(", ")}. Si prestan servicios en
-            otra entidad, esas erogaciones se declaran por separado ante cada estado.
+            Las erogaciones de empleados registrados en{" "}
+            {datos.otrasEntidades.map((otra) => otra.nombre).join(", ")} quedan fuera de la base de{" "}
+            {isn.nombre} y se declaran ante cada entidad con la tasa de su catálogo; confírmala y
+            registra ahí el establecimiento correspondiente.
           </p>
         ) : null}
       </Tarjeta>

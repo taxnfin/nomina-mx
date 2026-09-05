@@ -8,6 +8,7 @@ import {
 import { construirCedulaSipare, resumenEnteros } from "../src/lib/obligaciones/sipare";
 import { ENTIDADES_ISN_2025, entidadIsn } from "../src/lib/fiscal/isn";
 import { isnAplicable } from "../src/lib/fiscal/configuracion-isn";
+import { isnDeOtrasEntidades } from "../src/lib/obligaciones/servicio";
 import {
   calcularServicioEspecializado,
   cuatrimestresRepse,
@@ -155,6 +156,17 @@ describe("configuración de ISN por empresa", () => {
     expect(isn.sobretasa).toBe(0.1);
     expect(isn.diaLimite).toBe(20);
     expect(isn.tasaPropia).toBe(true);
+  });
+
+  it("determina por separado las erogaciones de empleados de otras entidades", () => {
+    const otras = isnDeOtrasEntidades([
+      { clave: "CMX", baseIsn: 10000 },
+      { clave: "CMX", baseIsn: 5000 },
+      { clave: "JAL", baseIsn: 20000 },
+    ]);
+    expect(otras.map((o) => o.clave)).toEqual(["CMX", "JAL"]);
+    expect(otras[0].baseIsn.toNumber()).toBe(15000);
+    expect(otras[0].isn.toNumber()).toBeCloseTo(15000 * (entidadIsn("CMX")?.tasa ?? 0), 2);
   });
 
   it("tolera una entidad fuera del catálogo apoyándose en lo capturado", () => {
