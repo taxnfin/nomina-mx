@@ -3,6 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import type { Circle, Map as MapaLeaflet, Marker } from "leaflet";
 import { useEffect, useRef, useState } from "react";
+import { variantesDeBusqueda } from "@/lib/checador/busqueda-direccion";
 
 const CENTRO_INICIAL: [number, number] = [19.4326, -99.1332];
 
@@ -105,26 +106,49 @@ export function SelectorUbicacion({
     circulo.current?.setRadius(radio);
   }, [radio]);
 
+  async function consultarNominatim(consulta: string): Promise<Resultado[]> {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", consulta);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("limit", "5");
+    const respuesta = await fetch(url, { headers: { "Accept-Language": "es" } });
+    const datos: Array<{ display_name: string; lat: string; lon: string }> =
+      await respuesta.json();
+    return datos.map((d) => ({
+      nombre: d.display_name,
+      latitud: Number(d.lat),
+      longitud: Number(d.lon),
+    }));
+  }
+
   async function buscar() {
     const consulta = busqueda.trim();
     if (consulta === "") return;
+
+    const coordenadas = consulta.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (coordenadas) {
+      elegir({
+        nombre: consulta,
+        latitud: Number(coordenadas[1]),
+        longitud: Number(coordenadas[2]),
+      });
+      return;
+    }
+
     setBuscando(true);
     setAviso(null);
     try {
-      const url = new URL("https://nominatim.openstreetmap.org/search");
-      url.searchParams.set("q", consulta);
-      url.searchParams.set("format", "jsonv2");
-      url.searchParams.set("limit", "5");
-      const respuesta = await fetch(url, { headers: { "Accept-Language": "es" } });
-      const datos: Array<{ display_name: string; lat: string; lon: string }> =
-        await respuesta.json();
-      const encontrados = datos.map((d) => ({
-        nombre: d.display_name,
-        latitud: Number(d.lat),
-        longitud: Number(d.lon),
-      }));
+      let encontrados: Resultado[] = [];
+      for (const variante of variantesDeBusqueda(consulta)) {
+        encontrados = await consultarNominatim(variante);
+        if (encontrados.length > 0) break;
+      }
       setResultados(encontrados);
-      if (encontrados.length === 0) setAviso("Sin resultados; marca el punto en el mapa.");
+      if (encontrados.length === 0) {
+        setAviso(
+          "Sin resultados: prueba con calle y ciudad, pega las coordenadas de Google Maps (25.6866, -100.3161) o da clic en el mapa.",
+        );
+      }
     } catch {
       setAviso("No se pudo buscar la dirección; marca el punto en el mapa.");
     } finally {
@@ -154,7 +178,7 @@ export function SelectorUbicacion({
                 void buscar();
               }
             }}
-            placeholder="Calle, número, ciudad"
+            placeholder="Calle y ciudad, o pega las coordenadas: 25.6866, -100.3161"
           />
         </label>
         <button
