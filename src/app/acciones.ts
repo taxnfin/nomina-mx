@@ -11,6 +11,7 @@ import {
   requerirRol,
   requerirSesion,
   verificarCredenciales,
+  type Sesion,
 } from "@/lib/auth/sesion";
 import { registrarEvento } from "@/lib/auditoria/bitacora";
 import {
@@ -45,6 +46,20 @@ function opcional(datos: FormData, campo: string): string | null {
   return valor === "" ? null : valor;
 }
 
+/**
+ * Verifica el rol sin lanzar: las Server Actions devuelven el mensaje en el
+ * formulario en lugar de reventar la petición con un 500.
+ */
+async function sesionConRol(
+  ...roles: string[]
+): Promise<{ sesion: Sesion; error?: undefined } | { sesion?: undefined; error: string }> {
+  try {
+    return { sesion: await requerirRol(...roles) };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
 function fecha(valor: string): Date {
   return new Date(`${valor}T00:00:00.000Z`);
 }
@@ -77,7 +92,8 @@ export async function accionCrearEmpleado(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   const salarioDiario = numero(datos, "salarioDiario");
   if (salarioDiario <= 0) return { error: "El salario diario debe ser mayor a cero." };
 
@@ -161,7 +177,8 @@ export async function accionRegistrarIncidencia(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   try {
     const incidencia = await prisma.incidencia.create({
       data: {
@@ -199,7 +216,8 @@ export async function accionRegistrarChecada(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   const momento = texto(datos, "ocurridoEn");
   if (momento === "") return { error: "Indica la fecha y hora de la checada." };
 
@@ -223,7 +241,8 @@ export async function accionConfigurarGeocerca(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   const empleadoId = texto(datos, "empleadoId");
   const latitud = opcional(datos, "latitudCentro");
   const longitud = opcional(datos, "longitudCentro");
@@ -286,7 +305,8 @@ export async function accionGenerarIncidenciasChecador(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   try {
     const resultados = await generarIncidenciasDelPeriodo(
       sesion.empresaId,
@@ -309,7 +329,8 @@ export async function accionGenerarCalendario(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  await requerirRol("ADMIN", "NOMINISTA");
+  const { error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (sinPermiso) return { error: sinPermiso };
   const ejercicio = numero(datos, "ejercicio", new Date().getUTCFullYear());
   const periodicidad = texto(datos, "periodicidad") as Periodicidad;
   const periodos = generarPeriodos(ejercicio, periodicidad);
@@ -335,7 +356,8 @@ export async function accionCalcularCorrida(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   try {
     const resultado = await calcularCorrida(
       sesion.empresaId,
@@ -382,7 +404,8 @@ export async function accionCalcularFiniquito(
   _estado: EstadoFormulario,
   datos: FormData,
 ): Promise<EstadoFormulario> {
-  const sesion = await requerirRol("ADMIN", "NOMINISTA");
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN", "NOMINISTA");
+  if (!sesion) return { error: sinPermiso };
   try {
     const empleado = await prisma.empleado.findFirstOrThrow({
       where: { id: texto(datos, "empleadoId"), empresaId: sesion.empresaId },

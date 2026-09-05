@@ -55,6 +55,7 @@ export async function registrarChecada(entrada: {
     entrada.latitud != null && entrada.longitud != null
       ? { latitud: entrada.latitud, longitud: entrada.longitud }
       : null;
+  const origen = entrada.origen ?? "WHATSAPP";
   const evaluacion = evaluarUbicacion(ubicacion, {
     centro:
       empleado.latitudCentro && empleado.longitudCentro
@@ -64,7 +65,8 @@ export async function registrarChecada(entrada: {
           }
         : null,
     radioMetros: empleado.radioMetros,
-    exigeUbicacion: empleado.exigeUbicacion,
+    // La captura manual es la vía de corrección de RH, nunca exige ubicación.
+    exigeUbicacion: empleado.exigeUbicacion && origen === "WHATSAPP",
   });
 
   if (entrada.mensajeId) {
@@ -88,7 +90,7 @@ export async function registrarChecada(entrada: {
       empleadoId: empleado.id,
       tipo: entrada.tipo,
       ocurridoEn,
-      origen: entrada.origen ?? "WHATSAPP",
+      origen,
       telefono: entrada.telefono ?? null,
       mensajeId: entrada.mensajeId ?? null,
       textoMensaje: entrada.textoMensaje ?? null,
