@@ -60,6 +60,7 @@ export function Campo({
   paso,
   minimo,
   maximo,
+  modoEntrada,
   ayuda,
 }: {
   etiqueta: string;
@@ -70,6 +71,7 @@ export function Campo({
   paso?: string;
   minimo?: number;
   maximo?: number;
+  modoEntrada?: "decimal" | "numeric";
   ayuda?: string;
 }) {
   return (
@@ -82,6 +84,7 @@ export function Campo({
         step={paso}
         min={minimo}
         max={maximo}
+        inputMode={modoEntrada}
         required={requerido}
         defaultValue={valorInicial}
       />

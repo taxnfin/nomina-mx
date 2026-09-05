@@ -142,29 +142,21 @@ export default async function PaginaObligaciones({
               <Campo
                 etiqueta="Tasa (%)"
                 nombre="tasaIsn"
-                tipo="number"
-                paso="0.0001"
-                minimo={0}
-                maximo={100}
+                modoEntrada="decimal"
                 valorInicial={ultima?.tasaIsn ? Number(ultima.tasaIsn) * 100 : ""}
-                ayuda="Vacío = tasa del catálogo estatal"
+                ayuda="0 a 100; vacío = tasa del catálogo estatal"
               />
               <Campo
                 etiqueta="Sobretasa (%)"
                 nombre="sobretasaIsn"
-                tipo="number"
-                paso="0.0001"
-                minimo={0}
-                maximo={100}
+                modoEntrada="decimal"
                 valorInicial={ultima?.sobretasaIsn ? Number(ultima.sobretasaIsn) * 100 : ""}
-                ayuda="Adicionales estatales, si aplican"
+                ayuda="0 a 100; adicionales estatales, si aplican"
               />
               <Campo
                 etiqueta="Día límite"
                 nombre="diaLimiteIsn"
-                tipo="number"
-                minimo={1}
-                maximo={28}
+                modoEntrada="numeric"
                 valorInicial={ultima?.diaLimiteIsn ?? ""}
                 ayuda="Día del mes siguiente (1 a 28)"
               />

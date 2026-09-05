@@ -32,6 +32,15 @@ Ojo: navegar a `/login` con sesión activa NO cierra la sesión anterior; para c
 ## Control de rol
 - Autorizar como AUDITOR devuelve un mensaje amigable, pero el alta de empleado como AUDITOR puede terminar en una excepción de servidor sin manejar (`POST /empleados 500`, `requerirRol` lanza `Error`). Verifica siempre en la base que el registro NO se haya creado y repórtalo como bug de manejo de errores si vuelve a ocurrir.
 
+## ISN por empresa con vigencias (`/obligaciones`)
+- Tras cambios de esquema corre `npx prisma migrate deploy` y `npx prisma db seed` (idempotente) antes de probar.
+- La configuración vive en `ConfiguracionIsn` (unique `empresaId + vigenteDesde`); revísala con `PGPASSWORD=postgres psql -h localhost -U postgres -d nomina -c 'SELECT "vigenteDesde","claveEntidadIsn","tasaIsn","diaLimiteIsn" FROM "ConfiguracionIsn" ORDER BY 1;'`.
+- El mes se navega por URL: `/obligaciones?ejercicio=2025&mes=N` con `mes` base 0 (0 = enero). Se aplica la configuración vigente al último día del mes.
+- La base ISN suma las percepciones de las corridas cuya `periodo.fechaPago` cae en el mes y cuyo estado no sea CANCELADA.
+- **No hay UI para la entidad federativa del empleado**: para probar el renglón de otra entidad usa `UPDATE "Empleado" SET "claveEntidadFederativa"='CMX' WHERE "numeroEmpleado"='0004';` y **revierte a 'NLE'** al terminar.
+- Cuidado al probar valores inválidos: los campos son `type="number"` con `min`/`max` nativos, así que la mayoría los bloquea el navegador y el mensaje del servidor nunca se ve. Escribir texto en un campo numérico se envía como **vacío**, y vacío significa "usar la tasa del catálogo", por lo que el guardado puede tener éxito y crear una vigencia no deseada: usa siempre una fecha centinela (p. ej. `2025-09-01`), verifica en la base y borra el renglón sobrante.
+- AUDITOR no debe ver el formulario: en su lugar aparece "… Solo el rol ADMIN puede modificarlo." más la tabla de historial.
+
 ## Webhook de WhatsApp
 Exige firma de Twilio (`TWILIO_AUTH_TOKEN`, `TWILIO_WEBHOOK_URL`); no se puede probar desde el navegador. Usa un helper que firme la petición (p. ej. `~/checada.sh <From> <Body> <MessageSid> [Lat] [Lon]`).
 
