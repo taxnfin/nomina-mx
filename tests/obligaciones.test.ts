@@ -190,12 +190,19 @@ describe("servicios especializados", () => {
     expect(estadoRegistro(registro, new Date("2026-06-01T00:00:00Z")).vigente).toBe(false);
   });
 
-  it("informa los tres cuatrimestres con corte al 17", () => {
+  it("informa los tres cuatrimestres con corte al 17 recorrido a día hábil", () => {
     const cuatrimestres = cuatrimestresRepse(2025);
+    // El 17 de mayo de 2025 es sábado.
     expect(cuatrimestres.map((c) => iso(c.fechaLimite))).toEqual([
       "2025-01-17",
-      "2025-05-17",
+      "2025-05-19",
       "2025-09-17",
     ]);
+  });
+
+  it("coincide con las fechas del calendario anual de ICSOE y SISUB", () => {
+    const calendario = calendarioDeObligaciones(2025, { tieneRepse: true });
+    const icsoe = calendario.filter((o) => o.clave === "ICSOE").map((o) => iso(o.fechaLimite));
+    expect(cuatrimestresRepse(2025).map((c) => iso(c.fechaLimite))).toEqual(icsoe);
   });
 });
