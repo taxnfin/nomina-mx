@@ -10,6 +10,8 @@ const ENLACES = [
   { href: "/checador", texto: "Checador" },
   { href: "/nomina", texto: "Nómina" },
   { href: "/finiquitos", texto: "Finiquitos" },
+  { href: "/obligaciones", texto: "Obligaciones" },
+  { href: "/repse", texto: "REPSE" },
   { href: "/auditoria", texto: "Trazabilidad" },
 ];
 
