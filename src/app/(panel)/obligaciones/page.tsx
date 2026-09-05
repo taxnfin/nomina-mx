@@ -1,10 +1,12 @@
-import { Campo, Etiqueta, Metrica, Tabla, Tarjeta, Vacio } from "@/components/ui";
+import { accionGuardarConfiguracionIsn } from "@/app/acciones";
+import { Formulario } from "@/components/formulario";
+import { Campo, Etiqueta, Metrica, Seleccion, Tabla, Tarjeta, Vacio } from "@/components/ui";
 import { requerirSesion } from "@/lib/auth/sesion";
 import { prisma } from "@/lib/db";
 import { formatoMxn } from "@/lib/dinero";
-import { entidadIsn } from "@/lib/fiscal/isn";
+import { OPCIONES_ENTIDAD_ISN } from "@/lib/fiscal/configuracion-isn";
 import { calendarioDeObligaciones } from "@/lib/obligaciones/calendario";
-import { entidadPrincipal, obligacionesDelMes } from "@/lib/obligaciones/servicio";
+import { obligacionesDelMes } from "@/lib/obligaciones/servicio";
 
 export const dynamic = "force-dynamic";
 
@@ -37,15 +39,15 @@ export default async function PaginaObligaciones({
   const ejercicio = Number(filtros.ejercicio) || hoy.getUTCFullYear();
   const mes = filtros.mes !== undefined ? Number(filtros.mes) : hoy.getUTCMonth();
 
-  const [datos, claveEntidad, repse] = await Promise.all([
+  const [datos, empresa, repse] = await Promise.all([
     obligacionesDelMes(sesion.empresaId, ejercicio, mes),
-    entidadPrincipal(sesion.empresaId),
+    prisma.empresa.findUniqueOrThrow({ where: { id: sesion.empresaId } }),
     prisma.registroRepse.findUnique({ where: { empresaId: sesion.empresaId } }),
   ]);
 
-  const entidad = claveEntidad ? entidadIsn(claveEntidad) : null;
+  const isn = datos.isn;
   const calendario = calendarioDeObligaciones(ejercicio, {
-    entidad,
+    entidad: { nombre: isn.nombre, diaLimite: isn.diaLimite },
     tieneRepse: repse !== null,
   });
 
@@ -105,9 +107,57 @@ export default async function PaginaObligaciones({
         <Metrica
           etiqueta="ISN del mes"
           valor={formatoMxn(datos.totalIsn)}
-          nota={entidad ? `${entidad.nombre} · ${pct(entidad.tasa)}` : "Sin entidad configurada"}
+          nota={`${isn.nombre} · ${pct(isn.tasa)}`}
         />
       </div>
+
+      <Tarjeta
+        titulo="Impuesto sobre nóminas de la empresa"
+        descripcion={`Cada entidad legisla su propia tasa y fecha de pago. Si dejas la tasa vacía se usa la del catálogo (${isn.nombre}: ${pct(isn.tasa)}, día ${isn.diaLimite} del mes siguiente).${isn.nota ? ` ${isn.nota}` : ""}`}
+      >
+        {sesion.rol === "ADMIN" ? (
+          <Formulario accion={accionGuardarConfiguracionIsn} textoBoton="Guardar ISN">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Seleccion
+                etiqueta="Entidad federativa"
+                nombre="claveEntidadIsn"
+                opciones={OPCIONES_ENTIDAD_ISN}
+                valorInicial={empresa.claveEntidadIsn}
+                requerido
+              />
+              <Campo
+                etiqueta="Tasa (%)"
+                nombre="tasaIsn"
+                tipo="number"
+                paso="0.0001"
+                valorInicial={empresa.tasaIsn ? Number(empresa.tasaIsn) * 100 : ""}
+                ayuda="Vacío = tasa del catálogo estatal"
+              />
+              <Campo
+                etiqueta="Sobretasa (%)"
+                nombre="sobretasaIsn"
+                tipo="number"
+                paso="0.0001"
+                valorInicial={empresa.sobretasaIsn ? Number(empresa.sobretasaIsn) * 100 : ""}
+                ayuda="Adicionales estatales, si aplican"
+              />
+              <Campo
+                etiqueta="Día límite"
+                nombre="diaLimiteIsn"
+                tipo="number"
+                valorInicial={empresa.diaLimiteIsn ?? ""}
+                ayuda="Día del mes siguiente"
+              />
+            </div>
+          </Formulario>
+        ) : (
+          <p className="text-sm text-slate-600">
+            {isn.nombre} · {pct(isn.tasa)}
+            {isn.sobretasa ? ` + ${pct(isn.sobretasa)} de sobretasa` : ""} · vence el día{" "}
+            {isn.diaLimite} del mes siguiente. Solo el rol ADMIN puede modificarlo.
+          </p>
+        )}
+      </Tarjeta>
 
       <Tarjeta
         titulo={`Cédula SIPARE — ${MESES[mes]} ${ejercicio}`}
@@ -149,32 +199,27 @@ export default async function PaginaObligaciones({
       </Tarjeta>
 
       <Tarjeta
-        titulo="ISN por entidad"
-        descripcion="La tasa y el día límite provienen del catálogo estatal; verifica la ley de hacienda vigente porque varias entidades aplican sobretasas o tarifas progresivas."
+        titulo="Determinación del ISN"
+        descripcion={`Tasa ${isn.tasaPropia ? "capturada por la empresa" : "tomada del catálogo estatal"}; verifica la ley de hacienda vigente porque varias entidades aplican sobretasas, exclusiones o tarifas progresivas.`}
       >
-        {datos.entidades.length === 0 ? (
-          <Vacio texto="Sin recibos en el periodo." />
-        ) : (
-          <Tabla encabezados={["Entidad", "Tasa", "Base gravada", "ISN", "Día límite"]}>
-            {datos.entidades.map((fila) => {
-              const catalogo = entidadIsn(fila.clave);
-              return (
-                <tr key={fila.clave}>
-                  <td className="px-3 py-2">{fila.nombre}</td>
-                  <td className="px-3 py-2">
-                    {pct(fila.tasa)}
-                    {catalogo?.sobretasa ? ` + ${pct(catalogo.sobretasa)} sobretasa` : ""}
-                  </td>
-                  <td className="px-3 py-2">{formatoMxn(fila.baseIsn)}</td>
-                  <td className="px-3 py-2 font-medium">{formatoMxn(fila.isn)}</td>
-                  <td className="px-3 py-2">
-                    {catalogo ? `día ${catalogo.diaLimite} del mes siguiente` : "por confirmar"}
-                  </td>
-                </tr>
-              );
-            })}
-          </Tabla>
-        )}
+        <Tabla encabezados={["Entidad", "Tasa", "Base gravada", "ISN", "Día límite"]}>
+          <tr>
+            <td className="px-3 py-2">{isn.nombre}</td>
+            <td className="px-3 py-2">
+              {pct(isn.tasa)}
+              {isn.sobretasa ? ` + ${pct(isn.sobretasa)} sobretasa` : ""}
+            </td>
+            <td className="px-3 py-2">{formatoMxn(datos.baseIsn)}</td>
+            <td className="px-3 py-2 font-medium">{formatoMxn(datos.totalIsn)}</td>
+            <td className="px-3 py-2">día {isn.diaLimite} del mes siguiente</td>
+          </tr>
+        </Tabla>
+        {datos.entidadesAjenas.length > 0 ? (
+          <p className="mt-3 text-xs text-amber-700">
+            Hay empleados registrados en {datos.entidadesAjenas.join(", ")}. Si prestan servicios en
+            otra entidad, esas erogaciones se declaran por separado ante cada estado.
+          </p>
+        ) : null}
       </Tarjeta>
 
       <Tarjeta

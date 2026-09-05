@@ -121,6 +121,13 @@ model Empresa {
   codigoPostal       String
   registroPatronal   String?
   primaRiesgoTrabajo Decimal  @default(0.005) @db.Decimal(9, 6)
+  /// Entidad donde se causa el impuesto sobre nóminas (catálogo c_Estado del SAT).
+  claveEntidadIsn    String   @default("NLE")
+  /// Tasa de ISN de la empresa; si es nula se usa la del catálogo estatal.
+  tasaIsn            Decimal? @db.Decimal(9, 6)
+  sobretasaIsn       Decimal? @db.Decimal(9, 6)
+  /// Día del mes siguiente en que vence el ISN; si es nulo se usa el del catálogo.
+  diaLimiteIsn       Int?
   creadoEn           DateTime @default(now())
   actualizadoEn      DateTime @updatedAt
 
@@ -201,7 +208,7 @@ model Empleado {
   puesto                 String
   departamento           String?
   registroPatronal       String?
-  claveEntidadFederativa String  @default("MEX")
+  claveEntidadFederativa String  @default("NLE")
   banco                  String?
   cuentaClabe            String?
 

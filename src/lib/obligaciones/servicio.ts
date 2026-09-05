@@ -1,7 +1,6 @@
 import { prisma } from "../db";
-import { d, pesos, type Decimal } from "../dinero";
-import { entidadIsn } from "../fiscal/isn";
-import { PARAMETROS_2025 } from "../fiscal/tablas2025";
+import { d, type Decimal } from "../dinero";
+import { isnAplicable, type IsnAplicable } from "../fiscal/configuracion-isn";
 import {
   construirCedulaSipare,
   resumenEnteros,
@@ -18,20 +17,17 @@ interface MemoriaImss {
   } | null;
 }
 
-export interface EnteroPorEntidad extends ResumenEntero {
-  clave: string;
-  nombre: string;
-  tasa: number;
-}
-
 export interface ObligacionesDelMes {
   ejercicio: number;
   mes: number;
   corridas: { id: string; descripcion: string; estado: string; fechaPago: Date }[];
   cedula: CedulaSipare;
   isr: ResumenEntero;
-  entidades: EnteroPorEntidad[];
+  isn: IsnAplicable;
+  baseIsn: Decimal;
   totalIsn: Decimal;
+  /** Entidades de los empleados distintas a la configurada para el ISN. */
+  entidadesAjenas: string[];
 }
 
 function rangoDelMes(ejercicio: number, mes: number): { desde: Date; hasta: Date } {
@@ -52,6 +48,14 @@ export async function obligacionesDelMes(
   mes: number,
 ): Promise<ObligacionesDelMes> {
   const { desde, hasta } = rangoDelMes(ejercicio, mes);
+
+  const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+  const isn = isnAplicable({
+    claveEntidadIsn: empresa.claveEntidadIsn,
+    tasaIsn: empresa.tasaIsn?.toString() ?? null,
+    sobretasaIsn: empresa.sobretasaIsn?.toString() ?? null,
+    diaLimiteIsn: empresa.diaLimiteIsn,
+  });
 
   const corridas = await prisma.corridaNomina.findMany({
     where: {
@@ -92,36 +96,22 @@ export async function obligacionesDelMes(
     }),
   );
 
-  const porEntidad = new Map<
-    string,
-    { isrRetenido: string; subsidioEntregado: string; baseIsn: string }[]
-  >();
-  for (const corrida of corridas) {
-    for (const recibo of corrida.recibos) {
-      const clave = recibo.empleado.claveEntidadFederativa;
-      const lista = porEntidad.get(clave) ?? [];
-      lista.push({
+  const entidadesAjenas = new Set<string>();
+  const importes = corridas.flatMap((corrida) =>
+    corrida.recibos.map((recibo) => {
+      if (recibo.empleado.claveEntidadFederativa !== isn.clave) {
+        entidadesAjenas.add(recibo.empleado.claveEntidadFederativa);
+      }
+      return {
         isrRetenido: recibo.isrRetenido.toString(),
         subsidioEntregado: recibo.subsidioEntregado.toString(),
         // El ISN grava las erogaciones por el trabajo personal subordinado.
         baseIsn: recibo.totalPercepciones.toString(),
-      });
-      porEntidad.set(clave, lista);
-    }
-  }
+      };
+    }),
+  );
 
-  const entidades: EnteroPorEntidad[] = [...porEntidad.entries()].map(([clave, recibos]) => {
-    const entidad = entidadIsn(clave);
-    const tasa = entidad?.tasa ?? PARAMETROS_2025.IMPUESTO_SOBRE_NOMINAS;
-    return {
-      clave,
-      nombre: entidad?.nombre ?? clave,
-      tasa,
-      ...resumenEnteros(recibos, tasa, entidad?.sobretasa ?? 0),
-    };
-  });
-
-  const todos = [...porEntidad.values()].flat();
+  const resumen = resumenEnteros(importes, isn.tasa, isn.sobretasa);
 
   return {
     ejercicio,
@@ -135,20 +125,10 @@ export async function obligacionesDelMes(
       fechaPago: corrida.periodo.fechaPago,
     })),
     cedula: construirCedulaSipare(recibosSipare),
-    isr: resumenEnteros(todos, 0),
-    entidades,
-    totalIsn: pesos(entidades.reduce((acc, entidad) => acc.plus(entidad.isn), d(0))),
+    isr: resumen,
+    isn,
+    baseIsn: resumen.baseIsn,
+    totalIsn: resumen.isn,
+    entidadesAjenas: [...entidadesAjenas],
   };
-}
-
-/** Entidad donde cotiza la mayoría de la plantilla; define el ISN del calendario. */
-export async function entidadPrincipal(empresaId: string): Promise<string | null> {
-  const agrupado = await prisma.empleado.groupBy({
-    by: ["claveEntidadFederativa"],
-    where: { empresaId, estado: "ACTIVO" },
-    _count: { _all: true },
-    orderBy: { _count: { claveEntidadFederativa: "desc" } },
-    take: 1,
-  });
-  return agrupado[0]?.claveEntidadFederativa ?? null;
 }

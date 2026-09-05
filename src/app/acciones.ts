@@ -22,6 +22,7 @@ import {
 import { timbrarCorrida } from "@/lib/cfdi/servicio";
 import { calcularFiniquito } from "@/lib/nomina/finiquito";
 import { salarioBaseCotizacion } from "@/lib/fiscal/imss";
+import { entidadIsn } from "@/lib/fiscal/isn";
 import { generarPeriodos, type Periodicidad } from "@/lib/fiscal/periodicidad";
 import { diasVacacionesPorAntiguedad, PARAMETROS_2025 } from "@/lib/fiscal/tablas2025";
 import { generarIncidenciasDelPeriodo, registrarChecada } from "@/lib/checador/servicio";
@@ -486,6 +487,63 @@ export async function accionCalcularFiniquito(
 
     revalidatePath("/finiquitos");
     return { mensaje: `Finiquito calculado: neto ${resultado.neto.toFixed(2)}.` };
+  } catch (error) {
+    return { error: mensajeError(error) };
+  }
+}
+
+export async function accionGuardarConfiguracionIsn(
+  _estado: EstadoFormulario,
+  datos: FormData,
+): Promise<EstadoFormulario> {
+  const { sesion, error: sinPermiso } = await sesionConRol("ADMIN");
+  if (!sesion) return { error: sinPermiso };
+
+  const clave = texto(datos, "claveEntidadIsn");
+  if (!entidadIsn(clave)) return { error: "Selecciona una entidad federativa válida." };
+
+  const tasa = texto(datos, "tasaIsn");
+  const sobretasa = texto(datos, "sobretasaIsn");
+  const diaLimite = texto(datos, "diaLimiteIsn");
+  if (tasa !== "" && (numero(datos, "tasaIsn") < 0 || numero(datos, "tasaIsn") > 100)) {
+    return { error: "La tasa debe expresarse en porcentaje entre 0 y 100." };
+  }
+
+  try {
+    const anterior = await prisma.empresa.findUniqueOrThrow({ where: { id: sesion.empresaId } });
+    const empresa = await prisma.empresa.update({
+      where: { id: sesion.empresaId },
+      data: {
+        claveEntidadIsn: clave,
+        // La captura es en porcentaje; se guarda en tanto por uno.
+        tasaIsn: tasa === "" ? null : (numero(datos, "tasaIsn") / 100).toFixed(6),
+        sobretasaIsn: sobretasa === "" ? null : (numero(datos, "sobretasaIsn") / 100).toFixed(6),
+        diaLimiteIsn: diaLimite === "" ? null : numero(datos, "diaLimiteIsn"),
+      },
+    });
+
+    await registrarEvento({
+      empresaId: sesion.empresaId,
+      actorId: sesion.usuarioId,
+      actorEmail: sesion.email,
+      actorRol: sesion.rol,
+      accion: "ISN_CONFIGURADO",
+      entidad: "Empresa",
+      entidadId: empresa.id,
+      datosAntes: {
+        claveEntidadIsn: anterior.claveEntidadIsn,
+        tasaIsn: anterior.tasaIsn?.toString() ?? null,
+      },
+      datosDespues: {
+        claveEntidadIsn: empresa.claveEntidadIsn,
+        tasaIsn: empresa.tasaIsn?.toString() ?? null,
+        sobretasaIsn: empresa.sobretasaIsn?.toString() ?? null,
+        diaLimiteIsn: empresa.diaLimiteIsn,
+      },
+    });
+
+    revalidatePath("/obligaciones");
+    return { mensaje: "Configuración de ISN guardada." };
   } catch (error) {
     return { error: mensajeError(error) };
   }

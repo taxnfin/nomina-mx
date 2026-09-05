@@ -7,6 +7,7 @@ import {
 } from "../src/lib/obligaciones/calendario";
 import { construirCedulaSipare, resumenEnteros } from "../src/lib/obligaciones/sipare";
 import { ENTIDADES_ISN_2025, entidadIsn } from "../src/lib/fiscal/isn";
+import { isnAplicable } from "../src/lib/fiscal/configuracion-isn";
 import {
   calcularServicioEspecializado,
   cuatrimestresRepse,
@@ -131,6 +132,35 @@ describe("catálogo de ISN", () => {
   it("devuelve null para claves desconocidas", () => {
     expect(entidadIsn("NLE")?.tasa).toBe(0.03);
     expect(entidadIsn("XXX")).toBeNull();
+  });
+});
+
+describe("configuración de ISN por empresa", () => {
+  it("usa la tasa del catálogo cuando la empresa no captura una propia", () => {
+    const isn = isnAplicable({ claveEntidadIsn: "NLE" });
+    expect(isn.nombre).toBe("Nuevo León");
+    expect(isn.tasa).toBe(0.03);
+    expect(isn.tasaPropia).toBe(false);
+    expect(isn.diaLimite).toBe(entidadIsn("NLE")?.diaLimite);
+  });
+
+  it("respeta la tasa, sobretasa y día límite capturados por la empresa", () => {
+    const isn = isnAplicable({
+      claveEntidadIsn: "NLE",
+      tasaIsn: "0.035000",
+      sobretasaIsn: "0.100000",
+      diaLimiteIsn: 20,
+    });
+    expect(isn.tasa).toBe(0.035);
+    expect(isn.sobretasa).toBe(0.1);
+    expect(isn.diaLimite).toBe(20);
+    expect(isn.tasaPropia).toBe(true);
+  });
+
+  it("tolera una entidad fuera del catálogo apoyándose en lo capturado", () => {
+    const isn = isnAplicable({ claveEntidadIsn: "XXX", tasaIsn: 0.025, diaLimiteIsn: 15 });
+    expect(isn.tasa).toBe(0.025);
+    expect(isn.diaLimite).toBe(15);
   });
 });
 

@@ -22,6 +22,7 @@ async function main() {
       codigoPostal: "01000",
       registroPatronal: "B5510768108",
       primaRiesgoTrabajo: 0.0054355,
+      claveEntidadIsn: "NLE",
     },
   });
 
